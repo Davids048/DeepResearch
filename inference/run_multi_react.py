@@ -37,8 +37,8 @@ if __name__ == "__main__":
 
     model_name = os.path.basename(model.rstrip('/'))
 
-    model_dir = os.path.join(output_base, f"{model_name}_sglang")
-    dataset_dir = os.path.join(model_dir, args.dataset)
+    model_dir = os.path.join(output_base, f"{model_name}")
+    dataset_dir = os.path.join(model_dir, args.dataset, datetime.now().strftime("%Y%m%d-%H%M%S"))
 
     os.makedirs(dataset_dir, exist_ok=True)
 
@@ -48,7 +48,10 @@ if __name__ == "__main__":
     print(f"Number of rollouts: {roll_out_count}")
     print(f"Data splitting: {worker_split}/{total_splits}")
 
-    data_filepath = f"{args.dataset}"
+    # Prepare data
+    # data_filepath = f"{args.dataset}"
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    data_filepath = os.path.join(cur_dir, "eval_data", f"{args.dataset}.jsonl")
     try:
         if data_filepath.endswith(".json"):
             with open(data_filepath, "r", encoding="utf-8") as f:
@@ -227,3 +230,7 @@ if __name__ == "__main__":
         print("\nAll tasks completed!")
 
     print(f"\nAll {roll_out_count} rollouts completed!")
+    
+    # Add a sentiniel doc 
+    with open(os.path.join(dataset_dir, "._ok"), 'w') as f:
+        f.write("All rollouts completed. Run succeeded.")
