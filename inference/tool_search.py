@@ -76,7 +76,7 @@ class Search(BaseTool):
 
         try:
             if "organic" not in results:
-                raise Exception(f"No results found for query: '{query}'. Use a less specific query.")
+                raise Exception(f"No results found for query: '{query}'. Use a less specific query. raw result: {results}")
 
             web_snippets = list()
             idx = 0
@@ -101,8 +101,8 @@ class Search(BaseTool):
 
             content = f"A Google search for '{query}' found {len(web_snippets)} results:\n\n## Web Results\n" + "\n\n".join(web_snippets)
             return content
-        except:
-            return f"No results found for '{query}'. Try with a more general query."
+        except Exception as e:
+            return str(e)
 
 
     
