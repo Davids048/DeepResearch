@@ -9,6 +9,7 @@ from datetime import datetime
 from react_agent import MultiTurnReactAgent
 import time
 import math
+import wandb
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -23,6 +24,8 @@ if __name__ == "__main__":
     parser.add_argument("--total_splits", type=int, default=1)
     parser.add_argument("--worker_split", type=int, default=1)
     args = parser.parse_args()
+
+    wandb.init()
 
     model = args.model
     output_base = args.output

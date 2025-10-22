@@ -22,6 +22,16 @@ if [ "$MODEL_PATH" = "/your/model/path" ] || [ -z "$MODEL_PATH" ]; then
     exit 1
 fi
 
+
+######################################
+### 0. Setup wandb           ###
+######################################
+export WANDB_PROJECT="deepresearch-evolve"
+export WANDB_NAME="$MODEL_PATH-${DATASET}-nroll${ROLLOUT_COUNT}"
+export WANDB_NOTES="debug"
+export WANDB_MODE=disabled # comment this out for default wandb behavior
+
+
 ######################################
 ### 1. start server           ###
 ######################################
