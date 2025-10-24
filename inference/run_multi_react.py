@@ -6,12 +6,13 @@ import concurrent.futures
 from tqdm import tqdm
 import threading
 from datetime import datetime
-from reflector.reflector import Reflector
-from utils.llm import LLMClient
+from evolve.reflector import Reflector
+from evolve.llm import LLMClient
+from evolve.evolver import Evolver
 from react_agent import MultiTurnReactAgent
 import time
 
-from evolve.evolver import Evolver
+
 import math
 import wandb
 

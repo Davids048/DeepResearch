@@ -1,9 +1,9 @@
 from dataclasses import dataclass, fields
 import json
 from typing import Dict, List, Any
-from utils.llm import LLMClient
-from reflector.reflector_prompt import REFLECTOR_TEMPLATE
-from utils.logger import setup_logging
+from evolve.llm import LLMClient
+from evolve.reflector_prompt import REFLECTOR_TEMPLATE
+from logger import setup_logging
 
 logger = setup_logging(level=5)
 

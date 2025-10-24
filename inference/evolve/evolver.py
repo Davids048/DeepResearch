@@ -1,6 +1,6 @@
 from react_agent import MultiTurnReactAgent
-from reflector.reflector import Reflector
-from utils.logger import setup_logging
+from evolve.reflector import Reflector
+from logger import setup_logging
 
 logger = setup_logging(name=__name__, level=5)
 
