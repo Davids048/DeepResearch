@@ -15,6 +15,7 @@ class ReflectorOutput:
     correct_approach: str
     key_insight: str
     correctness_judgement: str
+    bullet_tags: List[Dict[str, str]]
     raw: Dict[str, Any]
 
 response_format = {
@@ -52,37 +53,7 @@ class Reflector:
         ground_truth = trajectory['answer']
         termination = trajectory['termination']
 
-        reflection = self.reflect_single(
-            question=question,
-            prediction=prediction,
-            messages=messages,
-        )
-        reflection_summary = {
-            "question": question,
-            "ground_truth": ground_truth,
-            "prediction": prediction,
-            "termination": termination,
-        }
-        reflection_summary.update(reflection.raw)
-        return reflection_summary
-
-
-
-
-    def reflect_single(
-        self,
-        question,
-        prediction:str,
-        messages:List[dict],
-    ) -> ReflectorOutput:
-        """Create a single reflection on one agent task trajectory.
-        Args:
-            question: The original question posed to the agent.
-            prediction: The final prediction made by the agent.
-            messages: The list of messages in the agent's trajectory.
-        Returns:
-            ReflectorOutput: The reflection result. 
-        """
+        # make a single reflection 
         prompt = self.reflection_template.format(
             question=question,
             prediction=prediction,
@@ -95,17 +66,17 @@ class Reflector:
             response_format=response_format,
         )
         logger.debug(f"Reflector LLM response: {response}...") 
+        reflection = json.loads(response)
 
-        data = json.loads(response)
-        return ReflectorOutput(
-            reasoning=data.get("reasoning", ""),
-            error_identification=data.get("error_identification", ""),
-            root_cause_analysis=data.get("root_cause_analysis", ""),
-            correct_approach=data.get("correct_approach", ""),
-            key_insight=data.get("key_insight", ""),
-            correctness_judgement=data.get("correctness_judgement", ""),
-            raw=data,
-        )
+        
+        reflection_summary = {
+            "question": question,
+            "ground_truth": ground_truth,
+            "prediction": prediction,
+            "termination": termination,
+        }
+        reflection_summary.update(reflection)
+        return reflection_summary
 
             
 
