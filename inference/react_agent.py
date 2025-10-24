@@ -117,7 +117,7 @@ class MultiTurnReactAgent(FnCallAgent):
         
         return token_count
 
-    def _run(self, data: str, model: str, **kwargs) -> List[List[Message]]:
+    def _run(self, data: dict, model: str, **kwargs) -> List[List[Message]]:
         self.model=model
         try:
             question = data['item']['question']

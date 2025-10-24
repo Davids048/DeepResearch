@@ -6,8 +6,12 @@ import concurrent.futures
 from tqdm import tqdm
 import threading
 from datetime import datetime
+from reflector.reflector import Reflector
+from utils.llm import LLMClient
 from react_agent import MultiTurnReactAgent
 import time
+
+from evolve.evolver import Evolver
 import math
 import wandb
 
@@ -176,26 +180,59 @@ if __name__ == "__main__":
             function_list=["search", "visit", "google_scholar", "PythonInterpreter"]
         )
 
+
+        #####################
+        # Modify the job queue to use a controller (test_agent + reflector...etc) 
+        llm_client = LLMClient(model_name=model, base_url=f"http://localhost:6000/v1")
+        reflector = Reflector(llm=llm_client)
+
+        evolver = Evolver(
+            task_agent=test_agent,
+            model_name=model,
+            reflector=reflector
+        )
+        #####################
+
         write_locks = {i: threading.Lock() for i in range(1, roll_out_count + 1)}
 
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+            #########################################
+            # future_to_task = {
+            #     executor.submit(
+            #         test_agent._run,
+            #         task,
+            #         model
+            #     ): task for task in tasks_to_run_all
+            # }
+            # Using evolver to run tasks
             future_to_task = {
                 executor.submit(
-                    test_agent._run,
+                    evolver.evolve,
                     task,
-                    model
                 ): task for task in tasks_to_run_all
             }
+            ########################################
+
 
             for future in tqdm(as_completed(future_to_task), total=len(tasks_to_run_all), desc="Processing All Rollouts"):
                 task_info = future_to_task[future]
                 rollout_idx = task_info["rollout_idx"]
                 output_file = output_files[rollout_idx]
                 try:
-                    result = future.result()
+                    ###############################
+                    # result = future.result()
+                    # with write_locks[rollout_idx]:
+                    #     with open(output_file, "a", encoding="utf-8") as f:
+                    #         f.write(json.dumps(result, ensure_ascii=False) + "\n")
+
+                    evolve_result = future.result()
+                    trajectory = evolve_result["trajectory"]
+                    reflection = evolve_result["reflection"]
+                    result = trajectory | reflection
                     with write_locks[rollout_idx]:
-                        with open(output_file, "a", encoding="utf-8") as f:
+                        with open(output_file.replace(".jsonl", ".evolved.jsonl"), "a", encoding="utf-8") as f:
                             f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                    ###############################
                 except concurrent.futures.TimeoutError:
                     question = task_info["item"].get("question", "")
                     print(f'Timeout (>1800s): "{question}" (Rollout {rollout_idx})')
@@ -230,6 +267,7 @@ if __name__ == "__main__":
                     with write_locks[rollout_idx]:
                         with open(output_file, "a", encoding="utf-8") as f:
                             f.write(json.dumps(error_result, ensure_ascii=False) + "\n")
+                wandb.save(output_file.replace(".jsonl", ".evolved.jsonl"))
 
         print("\nAll tasks completed!")
 
