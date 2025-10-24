@@ -145,7 +145,7 @@ class Visit(BaseTool):
         
         for attempt in range(max_retries):
             headers = {
-                "Authorization": f"Bearer {JINA_API_KEYS}",
+                # "Authorization": f"Bearer {JINA_API_KEYS}",
             }
             try:
                 response = requests.get(
