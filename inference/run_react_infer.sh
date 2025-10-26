@@ -28,8 +28,8 @@ fi
 ######################################
 export WANDB_PROJECT="deepresearch-evolve"
 export WANDB_NAME="$MODEL_PATH-${DATASET}-nroll${ROLLOUT_COUNT}"
-export WANDB_NOTES="debug"
-export WANDB_MODE=disabled # comment this out for default wandb behavior
+export WANDB_NOTES="prototype evolve"
+# export WANDB_MODE=disabled # comment this out for default wandb behavior
 
 
 ######################################
@@ -134,5 +134,24 @@ python -u run_multi_react.py \
     --presence_penalty $PRESENCE_PENALTY \
     --total_splits ${WORLD_SIZE:-1} \
     --worker_split $((${RANK:-0} + 1)) \
-    --roll_out_count $ROLLOUT_COUNT
+    --roll_out_count $ROLLOUT_COUNT \
+    2>&1 | tee debug.log
 
+#######################################
+##4. Attach debug.log to wandb run  ###
+#######################################
+WANDB_RUN_ID=$(grep -oP '^WANDB_RUN_ID=\K.*' debug.log | tail -n1)
+
+if [ -n "$WANDB_RUN_ID" ] && [ "$WANDB_MODE" != "disabled" ]; then
+    echo "Attaching debug.log to existing wandb run ($WANDB_RUN_ID)..."
+    python - <<EOF
+import wandb, os
+run = wandb.init(project=os.getenv("WANDB_PROJECT"),
+                 id="${WANDB_RUN_ID}",
+                 resume="allow")
+wandb.save("debug.log")
+run.finish()
+EOF
+else
+    echo "Skipping wandb upload (either disabled or no run id found)."
+fi

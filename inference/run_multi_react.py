@@ -32,7 +32,8 @@ if __name__ == "__main__":
     parser.add_argument("--worker_split", type=int, default=1)
     args = parser.parse_args()
 
-    wandb.init()
+    wandb_run = wandb.init()
+    print(f"WANDB_RUN_ID={wandb_run.id}", flush=True)
 
     model = args.model
     output_base = args.output
@@ -163,6 +164,12 @@ if __name__ == "__main__":
     for rollout_idx in range(1, roll_out_count + 1):
         print(f"Rollout {rollout_idx}: already successfully processed: {len(processed_queries_per_rollout[rollout_idx])}, to run: {per_rollout_task_counts[rollout_idx]}")
 
+    ######################
+    # DEBUG
+    tasks_to_run_all = tasks_to_run_all[:1]
+    ######################
+
+
     if not tasks_to_run_all:
         print("All rollouts have been completed and no execution is required.")
     else:
@@ -180,7 +187,11 @@ if __name__ == "__main__":
 
         test_agent = MultiTurnReactAgent(
             llm=llm_cfg,
-            function_list=["search", "visit", "google_scholar", "PythonInterpreter"]
+            ####################
+            # DEBUG: limit to only search tool
+            # function_list=["search", "visit", "google_scholar", "PythonInterpreter"]
+            function_list=["search"]
+            ####################
         )
 
 
@@ -197,6 +208,12 @@ if __name__ == "__main__":
             curator=curator,
         )
         #####################
+
+        ################
+        # DEBUG
+        res = evolver.evolve(tasks_to_run_all[0], max_iterations=2)
+        exit()
+        ################
 
         write_locks = {i: threading.Lock() for i in range(1, roll_out_count + 1)}
 

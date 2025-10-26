@@ -59,39 +59,84 @@ class Evolver:
 
 
     def evolve(
-        self, 
-        task:dict,
+        self,
+        task: dict,
+        max_iterations: int = 1,
     ):
-        # task agent generates a trajectory 
-        trajectory = self.generator.generate(
-            task=task,
-            playbook=self.playbook,
-            reflection=None,
-        )
+        """Evolve the agent through iterative refinement on a single task.
 
-        logger.debug(f"Task agent finished....") 
+        Args:
+            task: Task to solve (must contain 'question' and 'answer')
+            max_iterations: Maximum evolution iterations (default: 1 for backward compatibility)
 
-        reflector_output, reflection_summary = self.reflector.reflect(
-            trajectory=trajectory,
-            playbook=self.playbook,
-        )
+        Returns:
+            Dict containing:
+                - trajectory: Last iteration's trajectory (backward compatible)
+                - reflection: Last iteration's reflection (backward compatible)
+                - curation: Last iteration's curation (backward compatible)
+                - history: List of all iterations (new in Phase 1)
+                - iterations_used: Number of iterations executed (new in Phase 1)
+        """
+        history = []
 
-        self._apply_bullet_tags(reflector_output)
+        logger.info(f"Starting evolution with max_iterations={max_iterations}")
 
-        curator_output = self.curator.curate(
-            question_context=task.get("question", ""),
-            playbook=self.playbook,
-            reflector_output=reflector_output,
-        )
+        for iteration in range(1, max_iterations + 1):
+            logger.info(f"=== Evolution Iteration {iteration}/{max_iterations} ===")
 
-        self.playbook.apply_delta(curator_output.delta)
+            # 1. GENERATE: Task agent generates a trajectory
+            trajectory = self.generator.generate(
+                task=task,
+                playbook=self.playbook,
+                reflection=None,  # Phase 3 will pass previous reflection here
+            )
 
-        logger.debug(f"playbook after 1 evolve:{self.playbook.as_prompt()}.")
+            logger.debug(f"Task agent finished iteration {iteration}")
 
+            # 2. REFLECT: Evaluate the attempt
+            reflector_output, reflection_summary = self.reflector.reflect(
+                trajectory=trajectory,
+                playbook=self.playbook,
+            )
+
+            # 3. TAG: Apply bullet tags based on performance
+            self._apply_bullet_tags(reflector_output)
+
+            # 4. CURATE: Update playbook
+            curator_output = self.curator.curate(
+                question_context=task.get("question", ""),
+                playbook=self.playbook,
+                reflector_output=reflector_output,
+            )
+
+            self.playbook.apply_delta(curator_output.delta)
+
+            logger.debug(f"Playbook after iteration {iteration}: {len(self.playbook.bullets())} bullets")
+
+            # 5. RECORD: Save iteration result
+            iteration_result = {
+                "iteration": iteration,
+                "trajectory": trajectory,
+                "reflection_output": reflector_output,
+                "reflection_summary": reflection_summary,
+                "curation": curator_output,
+            }
+            history.append(iteration_result)
+
+            logger.info(f"Iteration {iteration} completed")
+
+        logger.info(f"Evolution completed: {len(history)} iterations executed")
+
+        # Return last iteration for backward compatibility + full history
+        last_iteration = history[-1]
         return {
-            "trajectory": trajectory,
-            "reflection": reflection_summary,
-            "curation": curator_output,
+            # Backward compatible fields (last iteration)
+            "trajectory": last_iteration["trajectory"],
+            "reflection": last_iteration["reflection_summary"],
+            "curation": last_iteration["curation"],
+            # New fields (Phase 1)
+            "history": history,
+            "iterations_used": len(history),
         }
 
 
