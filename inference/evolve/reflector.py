@@ -62,6 +62,7 @@ class Reflector:
 
         # make a single reflection 
         prompt = self.reflection_template.format(
+            response_format=response_format,
             question=question,
             prediction=prediction,
             messages=messages,
@@ -74,10 +75,10 @@ class Reflector:
             ],
             # response_format=response_format, # cmd this out to allow explicit thinking.
         )
-        logger.debug(f"Reflector LLM response: {response}...") 
         reasoning, rest = self.llm.parse_response(response)
-        # reflection = json.loads(rest)
         data = json.loads(rest)
+        logger.debug(f"reflector reasoning: {reasoning}.")
+        logger.debug(f"extracted json:\n{data}.")
 
         # Create bullet tags
         bullet_tags: List[BulletTag] = []

@@ -57,9 +57,11 @@ class Curator:
             }],
             response_format=response_format,
         )
-        logger.debug(f"Curator response: {response}")
         reasoning, rest = self.llm.parse_response(response)
         data = json.loads(rest)
+        logger.debug(f"Curator reasoning: {reasoning}.")
+        logger.debug(f"Curator ops: {data}.")
+
         delta = DeltaBatch.from_json(data)
 
         return CuratorOutput(delta=delta, raw=data)

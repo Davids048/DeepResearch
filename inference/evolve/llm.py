@@ -56,7 +56,6 @@ class LLMClient:
             return reasoning_match.group(1), reasoning_match.group(2)
 
         # 2) Fallback: closing tag only
-        print("Trying fallback...")
         if "</think>" in message_text or "</thinking>" in message_text:
             logger.debug(f"falling back to parse only closing think tag.")
             parts = re.split(r"</(?:think|thinking)>", message_text, maxsplit=1)
@@ -64,6 +63,7 @@ class LLMClient:
             content = parts[1] if len(parts) > 1 else ""
             return reasoning if reasoning else None, content
 
+        logger.warning("No thinking section found...")
         return None, message_text
 
     def parse_response(self, response):
