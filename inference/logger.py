@@ -28,7 +28,7 @@ class ColoredFormatter(logging.Formatter):
         parts = formatted.split(' - ', 3)  # Split into at most 4 parts
         if len(parts) >= 4:
             # Color everything except the actual message
-            colored = f"{color}{parts[0]} - {parts[1]} - {parts[2]}{self.RESET} - {parts[3]}"
+            colored = f">>>>> {color}{parts[0]} - {parts[1]} - {parts[2]}{self.RESET} - {parts[3]}"
             return colored
         return formatted
 
@@ -45,7 +45,7 @@ def setup_logging(name=None, logger=None, log_file=None, level=logging.INFO):
 
     logger.propagate = False
     if not logger.handlers:
-        fmt_str = '>>>>> [%(asctime)s] - [%(name)s:%(lineno)d] - %(levelname)s - \n %(message)s'
+        fmt_str = '[%(asctime)s] - [%(name)s:%(lineno)d] - %(levelname)s - \n %(message)s'
         datefmt = '%m-%d %H:%M:%S'
 
         # Console handler with color
