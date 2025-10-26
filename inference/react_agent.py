@@ -117,7 +117,13 @@ class MultiTurnReactAgent(FnCallAgent):
         
         return token_count
 
-    def _run(self, data: dict, model: str, **kwargs) -> List[List[Message]]:
+    def _run(
+        self,
+        data: dict,
+        model: str,
+        system_prompt: str = None,
+        **kwargs,
+    ) -> List[List[Message]]:
         self.model=model
         try:
             question = data['item']['question']
@@ -129,7 +135,8 @@ class MultiTurnReactAgent(FnCallAgent):
         planning_port = data['planning_port']
         answer = data['item']['answer']
         self.user_prompt = question
-        system_prompt = SYSTEM_PROMPT
+        # Use provided system_prompt or default to SYSTEM_PROMPT
+        system_prompt = system_prompt if system_prompt is not None else SYSTEM_PROMPT
         cur_date = today_date()
         system_prompt = system_prompt + str(cur_date)
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}]
