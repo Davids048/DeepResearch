@@ -9,6 +9,8 @@ from datetime import datetime
 from evolve.reflector import Reflector
 from evolve.llm import LLMClient
 from evolve.evolver import Evolver
+from evolve.generator import Generator
+from evolve.curator import Curator
 from react_agent import MultiTurnReactAgent
 import time
 
@@ -186,11 +188,13 @@ if __name__ == "__main__":
         # Modify the job queue to use a controller (test_agent + reflector...etc) 
         llm_client = LLMClient(model_name=model, base_url=f"http://localhost:6000/v1")
         reflector = Reflector(llm=llm_client)
+        generator = Generator(task_agent=test_agent, model_name=model,)
+        curator = Curator(llm=llm_client)
 
         evolver = Evolver(
-            task_agent=test_agent,
-            model_name=model,
-            reflector=reflector
+            reflector=reflector,
+            generator=generator,
+            curator=curator,
         )
         #####################
 
