@@ -9,7 +9,7 @@ logger = setup_logging(name=__name__, level=5)
 DEFAULT_COMPLETION_CONFIG = {
     "max_tokens": 16000,
     "temperature": 0.7,
-    "top_p": 1.0,
+    # "top_p": 1.0,
     # "frequency_penalty": 0.0,
     # "presence_penalty": 0.0,
 }
