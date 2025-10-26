@@ -5,9 +5,6 @@ Apply relevant bullets, avoid known mistakes, and show step-by-step reasoning.
 Playbook:
 {playbook}
 
-Recent reflection:
-{reflection}
-
 Question:
 {question}
 
