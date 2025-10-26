@@ -5,7 +5,7 @@ from evolve.llm import LLMClient
 from evolve.reflector_prompt import REFLECTOR_TEMPLATE
 from logger import setup_logging
 
-logger = setup_logging(level=5)
+logger = setup_logging(name=__name__, level=5)
 
 @dataclass
 class ReflectorOutput: 
@@ -45,12 +45,12 @@ class Reflector:
 
     def reflect(
         self,
-        trajectory
+        trajectory:Dict
     ):
         question = trajectory['question']
         prediction = trajectory['prediction']
         messages = trajectory['messages']
-        ground_truth = trajectory['answer']
+        answer = trajectory['answer']
         termination = trajectory['termination']
 
         # make a single reflection 
@@ -58,6 +58,7 @@ class Reflector:
             question=question,
             prediction=prediction,
             messages=messages,  
+            response_format=response_format,
         )
         response = self.llm.completion(
             messages=[
@@ -66,12 +67,15 @@ class Reflector:
             response_format=response_format,
         )
         logger.debug(f"Reflector LLM response: {response}...") 
-        reflection = json.loads(response)
+        reasoning, rest = self.llm.parse_response(response)
+        reflection = json.loads(rest)
+        logger.debug(f"{type(reflection)}")
+        logger.debug(f"reflections:{reflection}.")
 
         
         reflection_summary = {
             "question": question,
-            "ground_truth": ground_truth,
+            "answer": answer,
             "prediction": prediction,
             "termination": termination,
         }
