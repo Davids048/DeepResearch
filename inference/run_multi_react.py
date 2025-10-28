@@ -30,7 +30,15 @@ if __name__ == "__main__":
     parser.add_argument("--roll_out_count", type=int, default=3)
     parser.add_argument("--total_splits", type=int, default=1)
     parser.add_argument("--worker_split", type=int, default=1)
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="evolve",
+        choices=["baseline", "evolve"],
+        help="Mode to run: 'baseline' uses test_agent, 'evolve' uses evolver",
+    )
     args = parser.parse_args()
+    print(args)
 
     wandb_run = wandb.init()
     print(f"WANDB_RUN_ID={wandb_run.id}", flush=True)
@@ -188,8 +196,9 @@ if __name__ == "__main__":
         test_agent = MultiTurnReactAgent(
             llm=llm_cfg,
             ####################
-            # DEBUG: limit to only search tool
             # function_list=["search", "visit", "google_scholar", "PythonInterpreter"]
+            ####################
+            # DEBUG: limit to only search tool
             function_list=["search"]
             ####################
         )
@@ -211,8 +220,8 @@ if __name__ == "__main__":
 
         ################
         # DEBUG
-        res = evolver.evolve(tasks_to_run_all[0], max_iterations=2)
-        exit()
+        # res = evolver.evolve(tasks_to_run_all[0], max_iterations=2)
+        # exit()
         ################
 
         write_locks = {i: threading.Lock() for i in range(1, roll_out_count + 1)}
@@ -227,11 +236,22 @@ if __name__ == "__main__":
             #     ): task for task in tasks_to_run_all
             # }
             # Using evolver to run tasks
+            # future_to_task = {
+            #     executor.submit(
+            #         evolver.evolve,
+            #         task,
+            #     ): task for task in tasks_to_run_all
+            # }
+            ########################################
+            if args.mode == "baseline":
+                run_func = lambda task: test_agent._run(task, model)
+            elif args.mode == "evolve":
+                run_func = evolver.evolve
+            else:
+                raise NotImplementedError()
+
             future_to_task = {
-                executor.submit(
-                    evolver.evolve,
-                    task,
-                ): task for task in tasks_to_run_all
+                executor.submit(run_func, task): task for task in tasks_to_run_all
             }
             ########################################
 
@@ -242,18 +262,21 @@ if __name__ == "__main__":
                 output_file = output_files[rollout_idx]
                 try:
                     ###############################
-                    # result = future.result()
-                    # with write_locks[rollout_idx]:
-                    #     with open(output_file, "a", encoding="utf-8") as f:
-                    #         f.write(json.dumps(result, ensure_ascii=False) + "\n")
-
-                    evolve_result = future.result()
-                    trajectory = evolve_result["trajectory"]
-                    reflection = evolve_result["reflection"]
-                    result = trajectory | reflection
-                    with write_locks[rollout_idx]:
-                        with open(output_file.replace(".jsonl", ".evolved.jsonl"), "a", encoding="utf-8") as f:
-                            f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                    if args.mode == "baseline":
+                        result = future.result()
+                        with write_locks[rollout_idx]:
+                            with open(output_file, "a", encoding="utf-8") as f:
+                                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                    elif args.mode == "evolve":
+                        evolve_result = future.result()
+                        trajectory = evolve_result["trajectory"]
+                        reflection = evolve_result["reflection"]
+                        result = trajectory | reflection
+                        with write_locks[rollout_idx]:
+                            with open(output_file.replace(".jsonl", ".evolved.jsonl"), "a", encoding="utf-8") as f:
+                                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                    else:
+                        raise NotImplementedError()
                     ###############################
                 except concurrent.futures.TimeoutError:
                     question = task_info["item"].get("question", "")
@@ -289,7 +312,15 @@ if __name__ == "__main__":
                     with write_locks[rollout_idx]:
                         with open(output_file, "a", encoding="utf-8") as f:
                             f.write(json.dumps(error_result, ensure_ascii=False) + "\n")
-                wandb.save(output_file.replace(".jsonl", ".evolved.jsonl"))
+
+                ##################################
+                if args.mode == "baseline":
+                    wandb.save(output_file)
+                elif args.mode == "evolve":
+                    wandb.save(output_file.replace(".jsonl", ".evolved.jsonl"))
+                else:
+                    raise NotImplementedError()
+                ##################################
 
         print("\nAll tasks completed!")
 

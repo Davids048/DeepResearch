@@ -125,6 +125,9 @@ echo "==== start infer... ===="
 
 cd "$( dirname -- "${BASH_SOURCE[0]}" )"
 
+# Create timestamped debug log filename
+DEBUG_LOG="debug_$(date +%Y%m%d-%H%M%S).log"
+
 python -u run_multi_react.py \
     --dataset "$DATASET" \
     --output "$OUTPUT_PATH" \
@@ -135,21 +138,22 @@ python -u run_multi_react.py \
     --total_splits ${WORLD_SIZE:-1} \
     --worker_split $((${RANK:-0} + 1)) \
     --roll_out_count $ROLLOUT_COUNT \
-    2>&1 | tee debug.log
+    --mode baseline \
+    2>&1 | tee $DEBUG_LOG
 
 #######################################
-##4. Attach debug.log to wandb run  ###
+##4. Attach debug log to wandb run  ###
 #######################################
-WANDB_RUN_ID=$(grep -oP '^WANDB_RUN_ID=\K.*' debug.log | tail -n1)
+WANDB_RUN_ID=$(grep -oP '^WANDB_RUN_ID=\K.*' $DEBUG_LOG | tail -n1)
 
 if [ -n "$WANDB_RUN_ID" ] && [ "$WANDB_MODE" != "disabled" ]; then
-    echo "Attaching debug.log to existing wandb run ($WANDB_RUN_ID)..."
+    echo "Attaching $DEBUG_LOG to existing wandb run ($WANDB_RUN_ID)..."
     python - <<EOF
 import wandb, os
 run = wandb.init(project=os.getenv("WANDB_PROJECT"),
                  id="${WANDB_RUN_ID}",
                  resume="allow")
-wandb.save("debug.log")
+wandb.save("${DEBUG_LOG}")
 run.finish()
 EOF
 else
