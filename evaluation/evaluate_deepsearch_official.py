@@ -456,6 +456,15 @@ def main():
                                                                         "webwalker", 
                                                                         "xbench-deepsearch",
                                                                         ])
+    ################################################
+    # DEBUG
+    parser.add_argument(
+        "--input_name",
+        type=str,
+        help="file name for the input jsonl.(Assumeing same input for 3 iterations.)",
+    )
+    ################################################
+
     args = parser.parse_args()
     
     dataset = args.dataset  
@@ -478,7 +487,16 @@ def main():
     print(f"Judge prompt:\n {judge_prompt}")
     print(f"Judge model:\n {judge_model}")
 
-    round1_file, round2_file, round3_file = os.path.join(args.input_folder, "iter1.jsonl"), os.path.join(args.input_folder, "iter2.jsonl"), os.path.join(args.input_folder, "iter3.jsonl") 
+    if not args.input_name:
+        print(">>>>> Using 3 iterations...")
+        round1_file, round2_file, round3_file = os.path.join(args.input_folder, "iter1.jsonl"), os.path.join(args.input_folder, "iter2.jsonl"), os.path.join(args.input_folder, "iter3.jsonl") 
+    else:
+        print(">>>>> Using 1 iteration...")
+        round1_file = os.path.join(args.input_folder, args.input_name)
+        round2_file = os.path.join(args.input_folder, args.input_name)
+        round3_file = os.path.join(args.input_folder, args.input_name)
+        pass
+
     for file in [round1_file, round2_file, round3_file]:
         assert os.path.exists(file), f"Prediction {file} not found, three  rounds are required "
      
