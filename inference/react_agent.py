@@ -140,6 +140,8 @@ class MultiTurnReactAgent(FnCallAgent):
         cur_date = today_date()
         system_prompt = system_prompt + str(cur_date)
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}]
+
+        print(f">>>>> agent received initial prompt: {messages}.")
         num_llm_calls_available = MAX_LLM_CALL_PER_RUN
         round = 0
         while num_llm_calls_available > 0:
@@ -182,7 +184,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 except:
                     result = 'Error: Tool call is not a valid JSON. Tool call must contain a valid "name" and "arguments" field.'
                 result = "<tool_response>\n" + result + "\n</tool_response>"
-                # print(result)
+                print(f">>>>> {result}")
                 messages.append({"role": "user", "content": result})
             if '<answer>' in content and '</answer>' in content:
                 termination = 'answer'
@@ -233,6 +235,7 @@ class MultiTurnReactAgent(FnCallAgent):
         return result
 
     def custom_call_tool(self, tool_name: str, tool_args: dict, **kwargs):
+        print(f">>>>> Calling tool: {tool_name}.<<<<<")
         if tool_name in TOOL_MAP:
             tool_args["params"] = tool_args
             if "python" in tool_name.lower():

@@ -73,6 +73,7 @@ class Search(BaseTool):
     
         data = res.read()
         results = json.loads(data.decode("utf-8"))
+        print(f">>>>> raw google search result: {results}<<<<<")
 
         try:
             if "organic" not in results:
@@ -111,6 +112,7 @@ class Search(BaseTool):
         return result
 
     def call(self, params: Union[str, dict], **kwargs) -> str:
+        print(f">>>>> Calling search....")
         try:
             query = params["query"]
         except:
