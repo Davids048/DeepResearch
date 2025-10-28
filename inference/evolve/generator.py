@@ -84,6 +84,7 @@ class Generator:
         #####################################
 
         #####################################
+        logger.debug(f"playbook: {playbook is not None}; reflection: {reflection is not None}.")
         # regular case [add new prompt to generate]
         # Build enhanced system prompt with playbook and reflection
         system_prompt = self._build_system_prompt_with_playbook(playbook)

@@ -40,6 +40,9 @@ TOOL_MAP = {tool.name: tool for tool in TOOL_CLASS}
 import random
 import datetime
 
+from logger import setup_logging
+logger = setup_logging(name=__name__, level=10)
+
 
 def today_date():
     return datetime.date.today().strftime("%Y-%m-%d")
@@ -70,7 +73,7 @@ class MultiTurnReactAgent(FnCallAgent):
         base_sleep_time = 1 
         for attempt in range(max_tries):
             try:
-                print(f"--- Attempting to call the service, try {attempt + 1}/{max_tries} ---")
+                logger.info(f"--- Attempting to call the service, try {attempt + 1}/{max_tries} ---")
                 chat_response = client.chat.completions.create(
                     model=self.model,
                     messages=msgs,
@@ -88,24 +91,24 @@ class MultiTurnReactAgent(FnCallAgent):
                 # content = reasoning_content + content                
                 
                 if content and content.strip():
-                    print("--- Service call successful, received a valid response ---")
+                    logger.info("--- Service call successful, received a valid response ---")
                     return content.strip()
                 else:
-                    print(f"Warning: Attempt {attempt + 1} received an empty response.")
+                    logger.info(f"Warning: Attempt {attempt + 1} received an empty response.")
 
             except (APIError, APIConnectionError, APITimeoutError) as e:
-                print(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
+                logger.info(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
             except Exception as e:
-                print(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
+                logger.info(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
 
             if attempt < max_tries - 1:
                 sleep_time = base_sleep_time * (2 ** attempt) + random.uniform(0, 1)
                 sleep_time = min(sleep_time, 30) 
                 
-                print(f"Retrying in {sleep_time:.2f} seconds...")
+                logger.info(f"Retrying in {sleep_time:.2f} seconds...")
                 time.sleep(sleep_time)
             else:
-                print("Error: All retry attempts have been exhausted. The call has failed.")
+                logger.info("Error: All retry attempts have been exhausted. The call has failed.")
         
         return f"vllm server error!!!"
 
@@ -127,9 +130,9 @@ class MultiTurnReactAgent(FnCallAgent):
         self.model=model
         try:
             question = data['item']['question']
-        except: 
-            raw_msg = data['item']['messages'][1]["content"] 
-            question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg 
+        except:
+            raw_msg = data['item']['messages'][1]["content"]
+            question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg
 
         start_time = time.time()
         planning_port = data['planning_port']
@@ -141,12 +144,17 @@ class MultiTurnReactAgent(FnCallAgent):
         system_prompt = system_prompt + str(cur_date)
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}]
 
-        print(f">>>>> agent received initial prompt: {messages}.")
+        # Log start of execution
+        logger.info(f"=== Starting _run() for question: {question[:100]}{'...' if len(question) > 100 else ''}")
+        logger.info(f"Model: {model}, Max LLM calls: {MAX_LLM_CALL_PER_RUN}")
+
         num_llm_calls_available = MAX_LLM_CALL_PER_RUN
         round = 0
         while num_llm_calls_available > 0:
             # Check whether time is reached
-            if time.time() - start_time > 150 * 60:  # 150 minutes in seconds
+            elapsed_time = time.time() - start_time
+            if elapsed_time > 150 * 60:  # 150 minutes in seconds
+                logger.warning(f"Time limit exceeded: {elapsed_time/60:.2f} minutes")
                 prediction = 'No answer found after 2h30mins'
                 termination = 'No answer found after 2h30mins'
                 result = {
@@ -159,8 +167,12 @@ class MultiTurnReactAgent(FnCallAgent):
                 return result
             round += 1
             num_llm_calls_available -= 1
+            logger.info(f"--- Round {round} starting (LLM calls remaining: {num_llm_calls_available}, elapsed: {elapsed_time/60:.1f}m) ---")
             content = self.call_server(messages, planning_port)
-            print(f'Round {round}: {content}')
+
+            # Log truncated response for monitoring
+            content_preview = content[:200].replace('\n', ' ') + ('...' if len(content) > 200 else '')
+            logger.info(f'Round {round} response preview: {content_preview}')
             if '<tool_response>' in content:
                 pos = content.find('<tool_response>')
                 content = content[:pos]
@@ -171,43 +183,59 @@ class MultiTurnReactAgent(FnCallAgent):
                     if "python" in tool_call.lower():
                         try:
                             code_raw=content.split('<tool_call>')[1].split('</tool_call>')[0].split('<code>')[1].split('</code>')[0].strip()
+                            logger.info(f"Round {round}: Executing Python code ({len(code_raw)} chars)")
                             result = TOOL_MAP['PythonInterpreter'].call(code_raw)
                         except:
                             result = "[Python Interpreter Error]: Formatting error."
+                            logger.error(f"Round {round}: Python interpreter formatting error")
 
                     else:
                         tool_call = json5.loads(tool_call)
                         tool_name = tool_call.get('name', '')
                         tool_args = tool_call.get('arguments', {})
+                        # Log tool call with truncated args
+                        logger.info(f"Round {round}: Calling tool '{tool_name}' with args: {tool_args}")
                         result = self.custom_call_tool(tool_name, tool_args)
 
-                except:
+                except Exception as e:
                     result = 'Error: Tool call is not a valid JSON. Tool call must contain a valid "name" and "arguments" field.'
+                    logger.error(f"Round {round}: Tool call error - {str(e)[:100]}")
                 result = "<tool_response>\n" + result + "\n</tool_response>"
-                print(f">>>>> {result}")
+                # Log truncated tool result
+                result_preview = result[:150].replace('\n', ' ') + ('...' if len(result) > 150 else '')
+                logger.info(f"Round {round}: Tool result preview: {result_preview}")
                 messages.append({"role": "user", "content": result})
             if '<answer>' in content and '</answer>' in content:
+                answer_text = content.split('<answer>')[1].split('</answer>')[0]
+                logger.info(f"Round {round}: Answer found - {answer_text[:100]}{'...' if len(answer_text) > 100 else ''}")
                 termination = 'answer'
                 break
             if num_llm_calls_available <= 0 and '<answer>' not in content:
                 messages[-1]['content'] = 'Sorry, the number of llm calls exceeds the limit.'
+                logger.warning(f"Round {round}: LLM call limit reached")
 
             max_tokens = 110 * 1024
             token_count = self.count_tokens(messages)
-            print(f"round: {round}, token count: {token_count}")
+            logger.info(f"round: {round}, token count: {token_count}")
+
+            # Log token usage when approaching limit
+            if token_count > max_tokens * 0.8:
+                logger.warning(f"Round {round}: Token usage high - {token_count}/{max_tokens} ({token_count/max_tokens*100:.1f}%)")
 
             if token_count > max_tokens:
-                print(f"Token quantity exceeds the limit: {token_count} > {max_tokens}")
-                
+                logger.warning(f"Round {round}: Token limit exceeded - {token_count} > {max_tokens}")
+
                 messages[-1]['content'] = "You have now reached the maximum context length you can handle. You should stop making tool calls and, based on all the information above, think again and provide what you consider the most likely answer in the following format:<think>your final thinking</think>\n<answer>your answer</answer>"
                 content = self.call_server(messages, planning_port)
                 messages.append({"role": "assistant", "content": content.strip()})
                 if '<answer>' in content and '</answer>' in content:
                     prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
                     termination = 'generate an answer as token limit reached'
+                    logger.info(f"Final answer generated due to token limit: {prediction[:100]}{'...' if len(prediction) > 100 else ''}")
                 else:
                     prediction = messages[-1]['content']
                     termination = 'format error: generate an answer as token limit reached'
+                    logger.error(f"Format error when generating answer due to token limit")
                 result = {
                     "question": question,
                     "answer": answer,
@@ -225,6 +253,15 @@ class MultiTurnReactAgent(FnCallAgent):
             termination = 'answer not found'
             if num_llm_calls_available == 0:
                 termination = 'exceed available llm calls'
+
+        # Log final status
+        total_elapsed = time.time() - start_time
+        logger.info(f"=== _run() completed ===")
+        logger.info(f"Termination: {termination}")
+        logger.info(f"Total rounds: {round}")
+        logger.info(f"Total elapsed time: {total_elapsed/60:.2f} minutes")
+        logger.info(f"Prediction: {prediction[:150]}{'...' if len(prediction) > 150 else ''}")
+
         result = {
             "question": question,
             "answer": answer,
@@ -235,7 +272,6 @@ class MultiTurnReactAgent(FnCallAgent):
         return result
 
     def custom_call_tool(self, tool_name: str, tool_args: dict, **kwargs):
-        print(f">>>>> Calling tool: {tool_name}.<<<<<")
         if tool_name in TOOL_MAP:
             tool_args["params"] = tool_args
             if "python" in tool_name.lower():

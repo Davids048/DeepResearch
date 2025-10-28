@@ -4,33 +4,23 @@ import os
 import datetime
 
 class ColoredFormatter(logging.Formatter):
-    """Formatter that adds color to log levels"""
-    
-    # ANSI color codes
     COLORS = {
-        'DEBUG': '\033[36m',    # Cyan
-        'INFO': '\033[32m',     # Green
-        'WARNING': '\033[33m',  # Yellow
-        'ERROR': '\033[31m',    # Red
-        'CRITICAL': '\033[35m', # Magenta
+        "DEBUG": "\033[36m",
+        "INFO": "\033[32m",
+        "WARNING": "\033[33m",
+        "ERROR": "\033[31m",
+        "CRITICAL": "\033[35m",
     }
-    RESET = '\033[0m'
-    
+    RESET = "\033[0m"
+
     def format(self, record):
-        # Get the color for this log level
-        color = self.COLORS.get(record.levelname, self.RESET)
-        
-        # Format the message
-        formatted = super().format(record)
-        
-        # Find where the actual message starts (after the levelname)
-        # Split at " - " after levelname
-        parts = formatted.split(' - ', 3)  # Split into at most 4 parts
-        if len(parts) >= 4:
-            # Color everything except the actual message
-            colored = f">>>>> {color}{parts[0]} - {parts[1]} - {parts[2]}{self.RESET} - {parts[3]}"
-            return colored
-        return formatted
+        original = record.levelname
+        record.levelname = f"{self.COLORS.get(original, self.RESET)}{original}{self.RESET}"
+        try:
+            return super().format(record)
+        finally:
+            record.levelname = original
+
 
 
 def setup_logging(name=None, logger=None, log_file=None, level=logging.INFO):
@@ -45,8 +35,8 @@ def setup_logging(name=None, logger=None, log_file=None, level=logging.INFO):
 
     logger.propagate = False
     if not logger.handlers:
-        fmt_str = '[%(asctime)s] - %(levelname)s - [%(name)s:%(lineno)d] - \n %(message)s'
-        datefmt = '%m-%d %H:%M:%S'
+        fmt_str = "[%(asctime)s] [%(levelname)-8s] [%(name)s:%(lineno)d:%(funcName)s]  %(message)s"
+        datefmt = "%m-%d %H:%M:%S"
 
         # Console handler with color
         console_formatter = ColoredFormatter(

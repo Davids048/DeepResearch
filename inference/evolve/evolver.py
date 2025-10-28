@@ -24,10 +24,10 @@ class Evolver:
         
         #############################
         # DEBUG MODE: Create an initial playbook. 
-        self.playbook = self._create_mock_playbook()
-        logger.debug(f"DEBUG mode: Created mock playbook with {len(self.playbook.bullets())} bullets")
+        # self.playbook = self._create_mock_playbook()
+        # logger.debug(f"DEBUG mode: Created mock playbook with {len(self.playbook.bullets())} bullets")
         #############################
-        # self.playbook = playbook or Playbook()
+        self.playbook = playbook or Playbook()
         #############################
 
     @staticmethod
@@ -61,7 +61,7 @@ class Evolver:
     def evolve(
         self,
         task: dict,
-        max_iterations: int = 1,
+        max_iterations: int = 8,
         stop_on_correct: bool = True,
     ):
         """Evolve the agent through iterative refinement on a single task.
