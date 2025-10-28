@@ -78,7 +78,7 @@ class Reflector:
         reasoning, rest = self.llm.parse_response(response)
         data = json.loads(rest)
         logger.debug(f"reflector reasoning: {reasoning}.")
-        logger.debug(f"extracted json:\n{data}.")
+        logger.debug(f"reflector json:\n{data}.")
 
         # Create bullet tags
         bullet_tags: List[BulletTag] = []

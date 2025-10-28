@@ -45,7 +45,7 @@ def setup_logging(name=None, logger=None, log_file=None, level=logging.INFO):
 
     logger.propagate = False
     if not logger.handlers:
-        fmt_str = '[%(asctime)s] - [%(name)s:%(lineno)d] - %(levelname)s - \n %(message)s'
+        fmt_str = '[%(asctime)s] - %(levelname)s - [%(name)s:%(lineno)d] - \n %(message)s'
         datefmt = '%m-%d %H:%M:%S'
 
         # Console handler with color
