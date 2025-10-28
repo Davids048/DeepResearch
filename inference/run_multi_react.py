@@ -37,6 +37,10 @@ if __name__ == "__main__":
         choices=["baseline", "evolve"],
         help="Mode to run: 'baseline' uses test_agent, 'evolve' uses evolver",
     )
+    parser.add_argument(
+        "--debug-size",
+        type=int,
+    )
     args = parser.parse_args()
     print(args)
 
@@ -103,6 +107,11 @@ if __name__ == "__main__":
 
     print(f"Total items in dataset: {total_items}")
     print(f"Processing items {start_idx} to {end_idx-1} ({len(items)} items)")
+
+    if args.debug_size > 0:
+        print(f">>>> DEBUG: using the first {args.debug_size} samples.")
+        items = items[:args.debug_size]
+
 
     if total_splits > 1:
         # Add split suffix to output files when using splits
@@ -172,11 +181,6 @@ if __name__ == "__main__":
     for rollout_idx in range(1, roll_out_count + 1):
         print(f"Rollout {rollout_idx}: already successfully processed: {len(processed_queries_per_rollout[rollout_idx])}, to run: {per_rollout_task_counts[rollout_idx]}")
 
-    ######################
-    # DEBUG
-    tasks_to_run_all = tasks_to_run_all[:1]
-    ######################
-
 
     if not tasks_to_run_all:
         print("All rollouts have been completed and no execution is required.")
@@ -196,10 +200,10 @@ if __name__ == "__main__":
         test_agent = MultiTurnReactAgent(
             llm=llm_cfg,
             ####################
-            # function_list=["search", "visit", "google_scholar", "PythonInterpreter"]
+            function_list=["search", "visit", "google_scholar", "PythonInterpreter"]
             ####################
             # DEBUG: limit to only search tool
-            function_list=["search"]
+            # function_list=["search"]
             ####################
         )
 

@@ -28,7 +28,7 @@ fi
 ######################################
 export WANDB_PROJECT="deepresearch-evolve"
 export WANDB_NAME="$MODEL_PATH-${DATASET}-nroll${ROLLOUT_COUNT}"
-export WANDB_NOTES="prototype evolve"
+export WANDB_NOTES="prototype evolve parallel"
 # export WANDB_MODE=disabled # comment this out for default wandb behavior
 
 
@@ -116,6 +116,9 @@ else
     echo "All required servers are running successfully!"
 fi
 
+export SUMMARY_MODEL_NAME=$MODEL_PATH
+echo "Using MODEL_PATH as SUMMARY_MODEL_NAME..."
+
 #####################################
 ### 3. start infer               ####
 #####################################
@@ -138,7 +141,8 @@ python -u run_multi_react.py \
     --total_splits ${WORLD_SIZE:-1} \
     --worker_split $((${RANK:-0} + 1)) \
     --roll_out_count $ROLLOUT_COUNT \
-    --mode baseline \
+    --mode evolve \
+    --debug-size 1 \
     2>&1 | tee $DEBUG_LOG
 
 #######################################
