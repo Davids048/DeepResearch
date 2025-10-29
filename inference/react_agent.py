@@ -179,7 +179,7 @@ class MultiTurnReactAgent(FnCallAgent):
         """
         # Log response preview
         content_preview = content[:200].replace('\n', ' ') + ('...' if len(content) > 200 else '')
-        logger.info(f'Round {round} response preview: {content}')
+        logger.info(f'Round {round} response preview: {content_preview}')
 
         # Clean up <tool_response> if present
         if '<tool_response>' in content:
@@ -294,7 +294,7 @@ class MultiTurnReactAgent(FnCallAgent):
 
         # Log response preview
         content_preview = content[:200].replace('\n', ' ') + ('...' if len(content) > 200 else '')
-        logger.info(f'Round {round} response preview: {content}')
+        logger.info(f'Round {round} response preview: {content_preview}')
 
         # Convert vLLM tool calls to internal format
         tool_calls = []
@@ -397,7 +397,7 @@ class MultiTurnReactAgent(FnCallAgent):
                     # Format and log result
                     result_formatted = f"<tool_response>\n{result}\n</tool_response>"
                     result_preview = result[:150].replace('\n', ' ') + ('...' if len(result) > 150 else '')
-                    logger.info(f"Round {round}: Tool result preview: {result}")
+                    logger.info(f"Round {round}: Tool result preview: {result_preview}")
 
                     # Add to messages
                     messages.append({"role": "user", "content": result_formatted})

@@ -13,6 +13,7 @@ from evolve.generator import Generator
 from evolve.curator import Curator
 from react_agent import MultiTurnReactAgent
 import time
+import traceback
 
 
 import math
@@ -237,22 +238,6 @@ if __name__ == "__main__":
         write_locks = {i: threading.Lock() for i in range(1, roll_out_count + 1)}
 
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-            #########################################
-            # future_to_task = {
-            #     executor.submit(
-            #         test_agent._run,
-            #         task,
-            #         model
-            #     ): task for task in tasks_to_run_all
-            # }
-            # Using evolver to run tasks
-            # future_to_task = {
-            #     executor.submit(
-            #         evolver.evolve,
-            #         task,
-            #     ): task for task in tasks_to_run_all
-            # }
-            ########################################
             if args.mode == "baseline":
                 run_func = lambda task: test_agent._run(task, model)
             elif args.mode == "evolve":
@@ -263,9 +248,6 @@ if __name__ == "__main__":
             future_to_task = {
                 executor.submit(run_func, task): task for task in tasks_to_run_all
             }
-            ########################################
-
-
             for future in tqdm(as_completed(future_to_task), total=len(tasks_to_run_all), desc="Processing All Rollouts"):
                 task_info = future_to_task[future]
                 rollout_idx = task_info["rollout_idx"]
@@ -302,11 +284,11 @@ if __name__ == "__main__":
                         "prediction": "[Failed]"
                     }
                     with write_locks[rollout_idx]:
-                        with open(output_file, "a", encoding="utf-8") as f:
+                        with open(output_file.replace(".jsonl", ".timeout.jsonl"), "a", encoding="utf-8") as f:
                             f.write(json.dumps(error_result, ensure_ascii=False) + "\n")
                 except Exception as exc:
                     question = task_info["item"].get("question", "")
-                    print(f'Task for question "{question}" (Rollout {rollout_idx}) generated an exception: {exc}')
+                    print(f'Task for question "{question}" (Rollout {rollout_idx}) generated an exception: {exc} - {"".join(traceback.format_exception(type(exc), exc, exc.__traceback__))}')
                     error_result = {
                         "question": question,
                         "answer": task_info["item"].get("answer", ""),
@@ -320,7 +302,7 @@ if __name__ == "__main__":
                     print(error_result)
                     print("===============================")
                     with write_locks[rollout_idx]:
-                        with open(output_file, "a", encoding="utf-8") as f:
+                        with open(output_file.replace(".jsonl", ".err.jsonl"), "a", encoding="utf-8") as f:
                             f.write(json.dumps(error_result, ensure_ascii=False) + "\n")
 
                 ##################################
