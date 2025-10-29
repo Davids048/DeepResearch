@@ -5,6 +5,7 @@ from evolve.llm import LLMClient
 from evolve.reflector_prompt import REFLECTOR_TEMPLATE
 from evolve.schema_utils import create_response_format
 from evolve.playbook import BulletTag, Playbook
+from evolve.utils import format_messages
 from logger import setup_logging
 
 logger = setup_logging(name=__name__, level=5)
@@ -58,14 +59,17 @@ class Reflector:
         messages = trajectory['messages']
         answer = trajectory['answer']
         termination = trajectory['termination']
-        consulted_playbook_section = {} #TODO: FILL THIS PART with generator's response
+        consulted_playbook_section = "" #TODO: FILL THIS PART with generator's response
+        
+        # Format messages for better readability
+        formatted_messages = format_messages(messages)
 
         # make a single reflection 
         prompt = self.reflection_template.format(
             response_format=response_format,
             question=question,
             prediction=prediction,
-            messages=messages,
+            messages=formatted_messages,
             current_playbook=playbook.as_prompt() or "(empty playbook)",
             playbook_excerpt=consulted_playbook_section,
         )
