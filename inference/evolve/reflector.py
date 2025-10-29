@@ -80,7 +80,17 @@ class Reflector:
             # response_format=response_format, # cmd this out to allow explicit thinking.
         )
         reasoning, rest = self.llm.parse_response(response)
-        data = json.loads(rest)
+        try:
+            data = json.loads(rest)
+        except Exception as e:
+            logger.error(f"Unexpected error parsing reflector response: {e}")
+            logger.error(f"Raw response content: {rest}")
+            # Create a fallback data object for unexpected errors
+            data = {
+                "error": "Reflector encountered unexpected error",
+            }
+            logger.warning("Using fallback reflector output due to unexpected error")
+
         logger.debug(f"reflector reasoning: {reasoning}.")
         logger.debug(f"reflector json:\n{data}.")
 

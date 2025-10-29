@@ -58,7 +58,17 @@ class Curator:
             response_format=response_format,
         )
         reasoning, rest = self.llm.parse_response(response)
-        data = json.loads(rest)
+        try:
+            data = json.loads(rest)
+        except Exception as e:
+            logger.error(f"Unexpected error parsing curator response: {e}")
+            logger.error(f"Raw response content (first 500 chars): {rest[:500]}")
+            # Create a fallback data object for unexpected errors
+            data = {
+                "error": "Curator encountered unexpected error",
+            }
+            logger.warning("Using fallback curator output due to unexpected error")
+
         logger.debug(f"Curator reasoning: {reasoning}.")
         logger.debug(f"Curator ops: {data}.")
 
