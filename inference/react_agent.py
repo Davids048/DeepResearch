@@ -375,9 +375,10 @@ class MultiTurnReactAgent(FnCallAgent):
 
             # 2. Parse and extract tools (protocol-specific)
             content, tool_calls = self.parse_and_extract_tools(response, round)
+            assistant_msg = f"{content}\n<tool_call>\n{tool_calls}\n</tool_call>"
 
             # 3. Add assistant message
-            messages.append({"role": "assistant", "content": content})
+            messages.append({"role": "assistant", "content": assistant_msg})
 
             # 4. Execute tool calls (protocol-agnostic)
             if tool_calls:
