@@ -93,7 +93,6 @@ class Visit(BaseTool):
                 response.append(cur_response)
             response = "\n=======\n".join(response)
         
-        print(f'Summary Length {len(response)}; Summary Content {response}')
         return response.strip()
         
     def call_server(self, msgs, max_retries=2):
