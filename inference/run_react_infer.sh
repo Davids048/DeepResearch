@@ -54,7 +54,7 @@ timeout=6000
 start_time=$(date +%s)
 
 # main_ports=(6001 6002 6003 6004 6005 6006 6007 6008)
-main_ports=(6000)
+main_ports=($VLLM_PORT)
 echo "Mode: All ports used as main model"
 
 declare -A server_status
@@ -141,8 +141,9 @@ python -u run_multi_react.py \
     --total_splits ${WORLD_SIZE:-1} \
     --worker_split $((${RANK:-0} + 1)) \
     --roll_out_count $ROLLOUT_COUNT \
-    --mode evolve \
-    --debug-size 1 \
+    --port $VLLM_PORT \
+    --mode "${RUN_MODE:-baseline}" \
+    --debug-size ${DEBUG_SIZE:-0} \
     2>&1 | tee $DEBUG_LOG
 
 #######################################

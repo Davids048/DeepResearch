@@ -30,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--roll_out_count", type=int, default=3)
     parser.add_argument("--total_splits", type=int, default=1)
     parser.add_argument("--worker_split", type=int, default=1)
+    parser.add_argument("--port", type=int, default=6001, help="vLLM server port")
     parser.add_argument(
         "--mode",
         type=str,
@@ -42,11 +43,11 @@ if __name__ == "__main__":
         type=int,
     )
     args = parser.parse_args()
-    print(args)
 
     wandb_run = wandb.init()
     print(f"WANDB_RUN_ID={wandb_run.id}", flush=True)
 
+    print(args)
     model = args.model
     output_base = args.output
     roll_out_count = args.roll_out_count
@@ -140,9 +141,8 @@ if __name__ == "__main__":
 
     tasks_to_run_all = []
     per_rollout_task_counts = {i: 0 for i in range(1, roll_out_count + 1)}
-    # Define ports
-    # planning_ports = [6001, 6002, 6003, 6004, 6005, 6006, 6007, 6008]
-    planning_ports = [6000]
+    # Define ports - using single port from command line argument
+    planning_ports = [args.port]
     # Round-robin state
     planning_rr_idx = 0
     summary_rr_idx = 0
