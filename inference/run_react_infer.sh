@@ -141,8 +141,9 @@ python -u run_multi_react.py \
     --total_splits ${WORLD_SIZE:-1} \
     --worker_split $((${RANK:-0} + 1)) \
     --roll_out_count $ROLLOUT_COUNT \
-    --mode evolve \
-    --debug-size 1 \
+    --port $VLLM_PORT \
+    --mode "${RUN_MODE:-baseline}" \
+    --debug-size ${DEBUG_SIZE:-0} \
     2>&1 | tee $DEBUG_LOG
 
 #######################################
