@@ -60,11 +60,11 @@ class Reflector:
         answer = trajectory['answer']
         termination = trajectory['termination']
         consulted_playbook_section = "" #TODO: FILL THIS PART with generator's response
-        
+
         # Format messages for better readability
         formatted_messages = format_messages(messages)
 
-        # make a single reflection 
+        # make a single reflection
         prompt = self.reflection_template.format(
             response_format=response_format,
             question=question,
@@ -108,15 +108,8 @@ class Reflector:
         if not (bullet_tags or reflector_output.key_insight):
             logger.warning("No bullet tags or key_insights created...")
 
-        reflection_summary = {
-            "question": question,
-            "answer": answer,
-            "prediction": prediction,
-            "termination": termination,
-        }
-        reflection_summary.update(data)
 
-        return reflector_output, reflection_summary
+        return reflector_output
 
             
 

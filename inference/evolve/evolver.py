@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import os
 from typing import Optional
 from evolve.generator import Generator
@@ -104,7 +105,7 @@ class Evolver:
             logger.debug(f"Task agent finished iteration {iteration}")
 
             # 2. REFLECT: Evaluate the attempt
-            reflector_output, reflection_summary = self.reflector.reflect(
+            reflector_output = self.reflector.reflect(
                 trajectory=trajectory,
                 playbook=self.playbook,
             )
@@ -133,10 +134,9 @@ class Evolver:
             iteration_result = {
                 "iteration": iteration,
                 "trajectory": trajectory,
-                "reflection_output": reflector_output,
-                "reflection_summary": reflection_summary,
-                "curation": curator_output,
-                "correctness": correctness,
+                "reflection_output": asdict(reflector_output),
+                "curation": asdict(curator_output),
+                "reflector_judgement": correctness,
             }
             history.append(iteration_result)
 
@@ -157,16 +157,14 @@ class Evolver:
         # Return last iteration for backward compatibility + full history
         last_iteration = history[-1]
         return {
-            # Backward compatible fields (last iteration)
-            "trajectory": last_iteration["trajectory"],
-            "reflection": last_iteration["reflection_summary"],
-            "curation": last_iteration["curation"],
-            # Phase 1 fields
-            "history": history,
+            "question": last_iteration["trajectory"]["question"],
+            "answer": last_iteration["trajectory"]["answer"],
             "iterations_used": len(history),
-            # Phase 2 fields
-            "final_correctness": last_iteration["correctness"],
-            "achieved_correct": last_iteration["correctness"] == "correct",
+            "final_prediction": last_iteration["trajectory"]["prediction"],
+            "final_termination": last_iteration["trajectory"]["termination"],
+            "final_reflector_judgement": last_iteration["reflector_judgement"],
+            "rounds": last_iteration["trajectory"]["rounds"],
+            "history": history,
         }
 
 

@@ -11,13 +11,6 @@ from prompt_builder import build_system_prompt
 from logger import setup_logging
 logger = setup_logging(name=__name__, level=5)
 
-# @dataclass
-# class GeneratorOutput:
-#     reasoning: str
-#     final_answer: str
-#     bullet_ids: List[str]
-#     raw: Dict[str, Any]
-#
 
 class Generator:
     """Produces trajectories using the current playbook."""
@@ -39,26 +32,6 @@ class Generator:
         playbook: Playbook = None,
         reflection: Optional[str] = None,
     ):
-        #####################################
-        # DEBUG reflector/curator.
-        # 
-        # logger.debug("Bypass actual generation. Use a mock response ")
-        # # 
-        # trajectory_path = "/home/hal-jundas/agent/DeepResearch/inference/output/Qwen3-235B-A22B-Thinking-2507/browsecomp/20251024-184158/iter1.evolved.jsonl"
-        # with open(trajectory_path, "r") as f:
-        #     raw_data = f.readline()
-        #     data = json.loads(raw_data)
-        #     trajectory = {
-        #         "question": data.get("question"),
-        #         "answer": data.get("answer"),
-        #         "messages": data.get("messages"),
-        #         "prediction": data.get("prediction"),
-        #         "termination": data.get("termination")
-        #     }
-        # return trajectory
-        #####################################
-
-        #####################################
         logger.debug(f"playbook: {playbook is not None}; reflection: {reflection is not None}.")
 
         # Build system prompt using prompt builder
@@ -75,6 +48,3 @@ class Generator:
             system_prompt=system_prompt,
         )
         return trajectory
-        #####################################
-
-

@@ -261,12 +261,9 @@ if __name__ == "__main__":
                                 f.write(json.dumps(result, ensure_ascii=False) + "\n")
                     elif args.mode == "evolve":
                         evolve_result = future.result()
-                        trajectory = evolve_result["trajectory"]
-                        reflection = evolve_result["reflection"]
-                        result = trajectory | reflection
                         with write_locks[rollout_idx]:
                             with open(output_file.replace(".jsonl", ".evolved.jsonl"), "a", encoding="utf-8") as f:
-                                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                                f.write(json.dumps(evolve_result, ensure_ascii=False) + "\n")
                     else:
                         raise NotImplementedError()
                     ###############################
