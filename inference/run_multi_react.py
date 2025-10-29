@@ -42,6 +42,12 @@ if __name__ == "__main__":
         "--debug-size",
         type=int,
     )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=int(os.getenv("MAX_ITERATIONS", "8")),
+        help="Maximum evolution iterations for evolver (default: from MAX_ITERATIONS env or 8)",
+    )
     args = parser.parse_args()
 
     wandb_run = wandb.init()
@@ -250,7 +256,7 @@ if __name__ == "__main__":
             if args.mode == "baseline":
                 run_func = lambda task: test_agent._run(task, model)
             elif args.mode == "evolve":
-                run_func = evolver.evolve
+                run_func = lambda task: evolver.evolve(task, max_iterations=args.max_iterations)
             else:
                 raise NotImplementedError()
 
