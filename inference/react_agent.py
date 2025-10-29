@@ -14,6 +14,7 @@ from qwen_agent.settings import MAX_LLM_CALL_PER_RUN
 from qwen_agent.tools import BaseTool
 from qwen_agent.utils.utils import format_as_text_message, merge_generate_cfgs
 from prompt import *
+from prompt_builder import build_system_prompt, get_protocol_for_model
 import time
 import asyncio
 
@@ -44,9 +45,6 @@ from logger import setup_logging
 logger = setup_logging(name=__name__, level=10)
 
 
-def today_date():
-    return datetime.date.today().strftime("%Y-%m-%d")
-
 class MultiTurnReactAgent(FnCallAgent):
     def __init__(self,
                  function_list: Optional[List[Union[str, Dict, BaseTool]]] = None,
@@ -55,33 +53,9 @@ class MultiTurnReactAgent(FnCallAgent):
 
         self.llm_generate_cfg = llm["generate_cfg"]
         self.llm_local_path = llm["model"]
-        self.protocol = self._detect_protocol(self.llm_local_path)
-        self._validate_protocol()
+        self.protocol = get_protocol_for_model(self.llm_local_path)
 
         logger.info(f"Initialized MultiTurnReactAgent with protocol: {self.protocol}")
-
-    def _detect_protocol(self, model_path):
-        """Detect which protocol/model family to use based on model name"""
-        model_lower = model_path.lower()
-
-        # Define supported protocols
-        if "minimax" in model_lower or "m2" in model_lower:
-            return "minimaxm2"
-        # Add future models here
-        # elif "qwen3" in model_lower:
-        #     return "qwen3"
-
-        # Default protocol for most models
-        return "default"
-
-    def _validate_protocol(self):
-        """Validate that the detected protocol is supported"""
-        supported_protocols = ["default", "minimaxm2"]
-        if self.protocol not in supported_protocols:
-            raise ValueError(
-                f"Unsupported protocol '{self.protocol}' detected for model '{self.llm_local_path}'. "
-                f"Supported protocols: {supported_protocols}"
-            )
 
     def sanity_check_output(self, content):
         return "<think>" in content and "</think>" in content
@@ -120,14 +94,7 @@ class MultiTurnReactAgent(FnCallAgent):
 
     def get_system_prompt(self):
         """Protocol method: Get appropriate system prompt for the model"""
-        if self.protocol == "minimaxm2":
-            from prompt_minimaxm2 import SYSTEM_PROMPT_MINIMAXM2
-            return SYSTEM_PROMPT_MINIMAXM2
-        elif self.protocol == "default":
-            from prompt import SYSTEM_PROMPT
-            return SYSTEM_PROMPT
-        else:
-            raise NotImplementedError(f"get_system_prompt not implemented for protocol: {self.protocol}")
+        return build_system_prompt(model_name=self.llm_local_path)
 
     def count_tokens(self, messages):
         """Protocol method: Count tokens with model-specific template"""
@@ -376,8 +343,6 @@ class MultiTurnReactAgent(FnCallAgent):
 
         # Use provided system_prompt or get protocol-specific prompt
         system_prompt = system_prompt if system_prompt is not None else self.get_system_prompt()
-        cur_date = today_date()
-        system_prompt = system_prompt + str(cur_date)
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}]
 
         # Log start of execution

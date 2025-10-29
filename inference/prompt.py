@@ -1,5 +1,10 @@
-SYSTEM_PROMPT = """You are a deep research assistant. Your core function is to conduct thorough, multi-source investigations into any topic. You must handle both broad, open-domain inquiries and queries within specialized academic fields. For every request, synthesize information from credible, diverse sources to deliver a comprehensive, accurate, and objective response. When you have gathered sufficient information and are ready to provide the definitive response, you must enclose the entire final answer within <answer></answer> tags.
+# =============================================================================
+# Base Prompt Sections (used by prompt_builder.py to compose system prompts)
+# =============================================================================
 
+TASK_DESCRIPTION = """You are a deep research assistant. Your core function is to conduct thorough, multi-source investigations into any topic. You must handle both broad, open-domain inquiries and queries within specialized academic fields. For every request, synthesize information from credible, diverse sources to deliver a comprehensive, accurate, and objective response. When you have gathered sufficient information and are ready to provide the definitive response, you must enclose the entire final answer within <answer></answer> tags."""
+
+TOOLS_SECTION_DEFAULT = """
 # Tools
 
 You may call one or more functions to assist with the user query.
@@ -16,11 +21,11 @@ IMPORTANT: Any output you want to see MUST be printed to standard output using t
 
 Example of a correct call:
 <tool_call>
-{"name": "PythonInterpreter", "arguments": {}}
+{\\"name\\": \\"PythonInterpreter\\", \\"arguments\\": {}}
 <code>
 import numpy as np
 # Your code here
-print(f"The result is: {np.mean([1,2,3])}")
+print(f\\"The result is: {np.mean([1,2,3]\\")}")
 </code>
 </tool_call>", "parameters": {"type": "object", "properties": {}, "required": []}}}
 {"type": "function", "function": {"name": "google_scholar", "description": "Leverage Google Scholar to retrieve relevant information from academic publications. Accepts multiple queries. This tool will also return results from google search", "parameters": {"type": "object", "properties": {"query": {"type": "array", "items": {"type": "string", "description": "The search query."}, "minItems": 1, "description": "The list of search queries for Google Scholar."}}, "required": ["query"]}}}
@@ -30,9 +35,7 @@ print(f"The result is: {np.mean([1,2,3])}")
 For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
 <tool_call>
 {"name": <function-name>, "arguments": <args-json-object>}
-</tool_call>
-
-Current date: """
+</tool_call>"""
 
 EXTRACTOR_PROMPT = """Please process the following webpage content and user goal to extract relevant information:
 

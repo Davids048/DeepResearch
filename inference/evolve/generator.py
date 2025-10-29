@@ -6,9 +6,9 @@ from evolve.llm import LLMClient
 from evolve.generator_prompt import GENERATOR_PROMPT
 from react_agent import MultiTurnReactAgent
 from evolve.playbook import Playbook
-from prompt import SYSTEM_PROMPT
+from prompt_builder import build_system_prompt
 
-from logger import setup_logging 
+from logger import setup_logging
 logger = setup_logging(name=__name__, level=5)
 
 # @dataclass
@@ -32,31 +32,6 @@ class Generator:
         self.model_name = model_name
         self.prompt_template = prompt_template
 
-    def _build_system_prompt_with_playbook(
-        self,
-        playbook: Optional[Playbook] = None,
-    ) -> str:
-        """Build enhanced system prompt with playbook guidance and reflection insights.
-
-        Args:
-            playbook: Playbook containing strategic guidance
-            reflection: Recent reflection insights to incorporate
-
-        Returns:
-            Enhanced system prompt string
-        """
-        base_prompt = SYSTEM_PROMPT
-        sections = []
-
-        # Add playbook section if available
-        if playbook:
-            playbook_text = playbook.as_prompt()
-            if playbook_text:
-                sections.append("\n\n# Strategic Playbook\n")
-                sections.append("The following playbook contains proven strategies and common pitfalls. Apply relevant guidance during your research:\n")
-                sections.append(f"\n{playbook_text}")
-
-        return base_prompt + "".join(sections)
 
     def generate(
         self,
@@ -85,9 +60,13 @@ class Generator:
 
         #####################################
         logger.debug(f"playbook: {playbook is not None}; reflection: {reflection is not None}.")
-        # regular case [add new prompt to generate]
-        # Build enhanced system prompt with playbook and reflection
-        system_prompt = self._build_system_prompt_with_playbook(playbook)
+
+        # Build system prompt using prompt builder
+        system_prompt = build_system_prompt(
+            model_name=self.model_name,
+            playbook=playbook,
+            reflection=reflection,
+        )
         logger.debug(f"system prompt:\n{system_prompt}...")
 
         trajectory = self.task_agent._run(

@@ -1,14 +1,8 @@
 # MiniMax-M2 Tool Calling Configuration
-# This file defines the system prompt and tool schemas for MiniMax-M2 model
+# This file defines tool schemas for MiniMax-M2 model
 # The tools are defined in vLLM-compatible format (OpenAI tool schema)
 # vLLM will automatically convert these to MiniMax-M2's XML format
 
-SYSTEM_PROMPT_MINIMAXM2 = """You are a deep research assistant. Your core function is to conduct thorough, multi-source investigations into any topic. You must handle both broad, open-domain inquiries and queries within specialized academic fields. For every request, synthesize information from credible, diverse sources to deliver a comprehensive, accurate, and objective response. When you have gathered sufficient information and are ready to provide the definitive response, you must enclose the entire final answer within <answer></answer> tags.
-
-Current date: """
-
-# Tool definitions in vLLM/OpenAI compatible format
-# vLLM will automatically format these for MiniMax-M2's tool calling protocol
 TOOLS_MINIMAXM2 = [
     {
         "type": "function",
@@ -116,20 +110,3 @@ TOOLS_MINIMAXM2 = [
         }
     }
 ]
-
-# Extractor prompt remains the same as original
-EXTRACTOR_PROMPT_MINIMAXM2 = """Please process the following webpage content and user goal to extract relevant information:
-
-## **Webpage Content**
-{webpage_content}
-
-## **User Goal**
-{goal}
-
-## **Task Guidelines**
-1. **Content Scanning for Rational**: Locate the **specific sections/data** directly related to the user's goal within the webpage content
-2. **Key Extraction for Evidence**: Identify and extract the **most relevant information** from the content, you never miss any important information, output the **full original context** of the content as far as possible, it can be more than three paragraphs.
-3. **Summary Output for Summary**: Organize into a concise paragraph with logical flow, prioritizing clarity and judge the contribution of the information to the goal.
-
-**Final Output Format using JSON format has "rational", "evidence", "summary" feilds**
-"""
