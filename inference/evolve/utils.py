@@ -10,8 +10,11 @@ def format_messages(messages: List[Dict]) -> str:
         Formatted string representation of the entire conversation history
     """
     formatted_lines = []
+    for i, msg in enumerate(messages):
+        if i == 0:
+            # skip system message
+            continue
 
-    for msg in messages:
         role = msg.get("role", "unknown")
         content = msg.get("content", "")
 

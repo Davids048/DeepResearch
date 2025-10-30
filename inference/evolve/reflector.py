@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import json
 from typing import Dict, List, Any, Sequence
 from evolve.llm import LLMClient
-from evolve.reflector_prompt import REFLECTOR_TEMPLATE
+from evolve.reflector_prompt import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_TEMPLATE, REFLECTION_TOOLS
 from evolve.schema_utils import create_response_format
 from evolve.playbook import BulletTag, Playbook
 from evolve.utils import format_messages
@@ -66,18 +66,18 @@ class Reflector:
 
         # make a single reflection
         prompt = self.reflection_template.format(
-            response_format=response_format,
-            question=question,
-            prediction=prediction,
             messages=formatted_messages,
+            prediction=prediction,
             current_playbook=playbook.as_prompt() or "(empty playbook)",
             playbook_excerpt=consulted_playbook_section,
         )
+            prediction=prediction,
         response = self.llm.completion(
             messages=[
+                {"role": "system", "content": REFLECTOR_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            # response_format=response_format, # cmd this out to allow explicit thinking.
+            tools=REFLECTION_TOOLS,
         )
         reasoning, rest = self.llm.parse_response(response)
         try:
