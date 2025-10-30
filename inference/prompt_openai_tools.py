@@ -1,9 +1,11 @@
-# MiniMax-M2 Tool Calling Configuration
-# This file defines tool schemas for MiniMax-M2 model
-# The tools are defined in vLLM-compatible format (OpenAI tool schema)
-# vLLM will automatically convert these to MiniMax-M2's XML format
+# OpenAI-Compatible Tool Calling Configuration
+# This file defines tool schemas in OpenAI-compatible format
+# Used by models that support OpenAI tool calling API:
+# - MiniMax-M2 (vLLM automatically converts to M2's XML format)
+# - GLM-4.6 (sglang with --tool-call-parser glm45)
+# - Other models with similar tool calling support
 
-TOOLS_MINIMAXM2 = [
+TOOLS_OPENAI = [
     {
         "type": "function",
         "function": {

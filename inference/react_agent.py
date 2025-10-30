@@ -71,8 +71,8 @@ class MultiTurnReactAgent(FnCallAgent):
         """
         logger.debug(f"Calling server with protocol: {self.protocol}")
 
-        if self.protocol == "minimaxm2":
-            return self._call_server_minimaxm2(msgs, planning_port, max_tries)
+        if self.protocol in ["minimaxm2", "glm46"]:
+            return self._call_server_openai_tools(msgs, planning_port, max_tries)
         elif self.protocol == "default":
             return self._call_server_default(msgs, planning_port, max_tries)
         else:
@@ -85,8 +85,8 @@ class MultiTurnReactAgent(FnCallAgent):
 
         tool_calls_list format: [{"name": str, "arguments": dict}, ...]
         """
-        if self.protocol == "minimaxm2":
-            return self._parse_and_extract_tools_minimaxm2(response, round)
+        if self.protocol in ["minimaxm2", "glm46"]:
+            return self._parse_and_extract_tools_openai_tools(response, round)
         elif self.protocol == "default":
             return self._parse_and_extract_tools_default(response, round)
         else:
@@ -100,13 +100,13 @@ class MultiTurnReactAgent(FnCallAgent):
         """Protocol method: Count tokens with model-specific template"""
         tokenizer = AutoTokenizer.from_pretrained(self.llm_local_path)
 
-        if self.protocol == "minimaxm2":
-            # Include tools in token count for MiniMax-M2
-            from prompt_minimaxm2 import TOOLS_MINIMAXM2
+        if self.protocol in ["minimaxm2", "glm46"]:
+            # Include tools in token count for models using OpenAI tool format
+            from prompt_openai_tools import TOOLS_OPENAI
             full_prompt = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
-                tools=TOOLS_MINIMAXM2
+                tools=TOOLS_OPENAI
             )
         else:
             full_prompt = tokenizer.apply_chat_template(messages, tokenize=False)
@@ -226,12 +226,13 @@ class MultiTurnReactAgent(FnCallAgent):
         return content.strip(), tool_calls
 
     # ==========================================
-    # MINIMAXM2 PROTOCOL IMPLEMENTATION
+    # OPENAI TOOLS PROTOCOL IMPLEMENTATION
+    # Used by: MiniMax-M2, GLM-4.6
     # ==========================================
 
-    def _call_server_minimaxm2(self, msgs, planning_port, max_tries=10):
-        """MiniMax-M2 protocol: Use vLLM tool calling API"""
-        from prompt_minimaxm2 import TOOLS_MINIMAXM2
+    def _call_server_openai_tools(self, msgs, planning_port, max_tries=10):
+        """OpenAI Tools protocol: Use vLLM/sglang tool calling API with automatic parsing"""
+        from prompt_openai_tools import TOOLS_OPENAI
 
         openai_api_key = "EMPTY"
         openai_api_base = f"http://127.0.0.1:{planning_port}/v1"
@@ -245,11 +246,11 @@ class MultiTurnReactAgent(FnCallAgent):
         base_sleep_time = 1
         for attempt in range(max_tries):
             try:
-                logger.info(f"--- Attempting to call the service (MiniMax-M2), try {attempt + 1}/{max_tries} ---")
+                logger.info(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
                 chat_response = client.chat.completions.create(
                     model=self.model,
                     messages=msgs,
-                    tools=TOOLS_MINIMAXM2,
+                    tools=TOOLS_OPENAI,
                     tool_choice="auto",
                     temperature=self.llm_generate_cfg.get('temperature', 0.6),
                     top_p=self.llm_generate_cfg.get('top_p', 0.95),
@@ -280,9 +281,10 @@ class MultiTurnReactAgent(FnCallAgent):
 
         return None
 
-    def _parse_and_extract_tools_minimaxm2(self, message, round):
+    def _parse_and_extract_tools_openai_tools(self, message, round):
         """
-        MiniMax-M2 protocol: Extract content and tool calls from vLLM response.
+        OpenAI Tools protocol: Extract content and tool calls from vLLM/sglang response.
+        Used by: MiniMax-M2, GLM-4.6
         Returns: (content_str, tool_calls_list)
         """
         if message is None:

@@ -18,6 +18,8 @@ def detect_protocol(model_name: str) -> str:
 
     if "minimax" in model_lower or "m2" in model_lower:
         return "minimaxm2"
+    elif "glm" in model_lower:
+        return "glm46"
     # Add future models here
     # elif "qwen3" in model_lower:
     #     return "qwen3"
@@ -35,9 +37,14 @@ def get_tools_section(protocol: str) -> str:
     Get the tools section for a protocol.
 
     For minimaxm2: tools are passed via API, so return empty string
+    For glm46: tools are passed via API, so return empty string
     For default: return the XML tool definitions that go in the prompt
     """
     if protocol == "minimaxm2":
+        # Tools passed via vLLM API, not in prompt
+        return ""
+
+    elif protocol == "glm46":
         # Tools passed via vLLM API, not in prompt
         return ""
 

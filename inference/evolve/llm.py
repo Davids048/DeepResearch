@@ -8,8 +8,8 @@ logger = setup_logging(name=__name__, level=5)
 
 DEFAULT_COMPLETION_CONFIG = {
     "max_tokens": 16000,
-    "temperature": 0.7,
-    # "top_p": 1.0,
+    "temperature": 1.0,
+    "top_p": 0.95,
     # "frequency_penalty": 0.0,
     # "presence_penalty": 0.0,
 }
@@ -57,7 +57,7 @@ class LLMClient:
 
         # 2) Fallback: closing tag only
         if "</think>" in message_text or "</thinking>" in message_text:
-            logger.debug(f"falling back to parse only closing think tag.")
+            logger.warning(f"falling back to parse only closing think tag.")
             parts = re.split(r"</(?:think|thinking)>", message_text, maxsplit=1)
             reasoning = parts[0].strip()
             content = parts[1] if len(parts) > 1 else ""
@@ -76,5 +76,7 @@ class LLMClient:
         # Otherwise, parse the content to extract reasoning
         content = message.content if hasattr(message, 'content') else ""
         reasoning, remaining_content = self.parse_reasoning(content)
+        logger.debug(f">>>>>>>>>>>>> content: {content}.")
+        logger.debug(f">>>>>>>>>>>>> remaining_content:{remaining_content}.")
         return reasoning, remaining_content 
 

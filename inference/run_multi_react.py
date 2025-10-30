@@ -217,7 +217,7 @@ if __name__ == "__main__":
 
         #####################
         # Modify the job queue to use a controller (test_agent + reflector...etc) 
-        llm_client = LLMClient(model_name=model, base_url=f"http://localhost:6000/v1")
+        llm_client = LLMClient(model_name=model, base_url=f"http://localhost:{args.port}/v1")
         reflector = Reflector(llm=llm_client)
         generator = Generator(task_agent=test_agent, model_name=model,)
         curator = Curator(llm=llm_client)
