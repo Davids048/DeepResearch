@@ -25,3 +25,31 @@ def format_messages(messages: List[Dict]) -> str:
     return "\n".join(formatted_lines)
 
 
+def get_model_generation_config(model_name: str) -> Dict:
+    """Get model-specific generation configuration.
+
+    Args:
+        model_name: Name or identifier of the model
+
+    Returns:
+        Dictionary with generation config parameters for the model
+    """
+    # Normalize model name for matching
+    model_lower = model_name.lower()
+
+    # GLM-4.6 (and variants)
+    if "glm" in model_lower:
+        return {
+            "max_tokens": 16000,
+            "temperature": 0.1,
+            "top_p": 0.95,
+        }
+
+    # Default config for unknown models
+    return {
+        "max_tokens": 16000,
+        "temperature": 1.0,
+        "top_p": 0.95,
+    }
+
+

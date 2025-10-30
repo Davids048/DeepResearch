@@ -23,6 +23,7 @@ from tool_scholar import *
 from tool_python import *
 from tool_search import *
 from tool_visit import *
+from utils import get_model_generation_config
 
 OBS_START = '<tool_response>'
 OBS_END = '\n</tool_response>'
@@ -51,11 +52,13 @@ class MultiTurnReactAgent(FnCallAgent):
                  llm: Optional[Union[Dict, BaseChatModel]] = None,
                  **kwargs):
 
-        self.llm_generate_cfg = llm["generate_cfg"]
         self.llm_local_path = llm["model"]
+        # Get model-specific generation config
+        self.llm_generate_cfg = get_model_generation_config(self.llm_local_path)
         self.protocol = get_protocol_for_model(self.llm_local_path)
 
         logger.info(f"Initialized MultiTurnReactAgent with protocol: {self.protocol}")
+        logger.info(f"Generation config: {self.llm_generate_cfg}")
 
     def sanity_check_output(self, content):
         return "<think>" in content and "</think>" in content

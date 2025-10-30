@@ -5,7 +5,7 @@ from evolve.llm import LLMClient
 from evolve.reflector_prompt import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_TEMPLATE, REFLECTION_TOOLS
 from evolve.schema_utils import create_response_format
 from evolve.playbook import BulletTag, Playbook
-from evolve.utils import format_messages
+from utils import format_messages
 from logger import setup_logging
 
 logger = setup_logging(name=__name__, level=5)

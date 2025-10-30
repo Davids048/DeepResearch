@@ -2,8 +2,9 @@ from typing import List, Dict
 import json
 import re
 from openai import OpenAI
+from utils import get_model_generation_config
 
-from logger import setup_logging 
+from logger import setup_logging
 logger = setup_logging(name=__name__, level=5)
 
 DEFAULT_COMPLETION_CONFIG = {
@@ -17,9 +18,9 @@ DEFAULT_COMPLETION_CONFIG = {
 class LLMClient:
     """Client to interact with Large Language Models (LLMs)."""
     def __init__(
-        self, 
-        model_name: str, 
-        base_url:str, 
+        self,
+        model_name: str,
+        base_url:str,
     ):
         self.model_name = model_name
         self.base_url = base_url
@@ -27,15 +28,21 @@ class LLMClient:
             api_key="EMPTY",
             base_url=self.base_url,
         )
+        # Get model-specific generation config
+        self.default_completion_config = get_model_generation_config(model_name)
 
 
     def completion(
         self,
         messages: List,
-        completion_config=DEFAULT_COMPLETION_CONFIG,
+        completion_config=None,
         **kwargs,
     ) -> str:
         """Generate a response from the LLM based on the given prompt."""
+
+        # Use provided config, or fall back to model-specific default
+        if completion_config is None:
+            completion_config = self.default_completion_config
 
         raw_response = self.client.chat.completions.create(
             model=self.model_name,
