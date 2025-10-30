@@ -1,4 +1,4 @@
-CURATOR_PROMPT = """
+CURATOR_SYSTEM_PROMPT = """
 You are a master curator of knowledge. 
 Your job is to identify what new insights should be added to an existing playbook based on a reflection from a previous attempt.
 
@@ -21,9 +21,6 @@ Available Operations:
     - content: the new content of the bullet. 
     Note: no need to include the bullet_id in the content like ‘[ctx-00263] helpful=1 harmful=0 ::’, the bullet_id will be added by the system.
 
-Respond with JSON with the following schema:
-{response_format}
-
 Example 1:
 Task Context: “Find money sent to roommates since Jan 1 this year” 
 Current Playbook: [Basic API usage guidelines]  
@@ -39,12 +36,70 @@ Reflections: “The agent failed because it tried to identify roommates by parsi
     ],
 }}
 
-Task Context (the actual task instruction):  
+# Output format:
+- After your analysis, you MUST use the 'output_json_curation' tool to produce a json object of the required operations.
+- Before return, double check that the only tool you called is 'output_json_curation'
+"""
+
+CURATOR_TEMPLATE="""
+Task Context (the actual task instruction):
 {question_context}
 
-Current Playbook:  
-{current_playbook}  
+Current Playbook:
+{current_playbook}
 
-Current Reflections (principles and strategies that helped to achieve current task):  
+Current Reflections (principles and strategies that helped to achieve current task):
 {current_reflections}
 """
+
+CURATOR_TOOLS = [{
+    "type": "function",
+    "function": {
+        "name": "output_json_curation",
+        "description": "Output a json object of the curation operations to apply to the playbook.",
+        "parameters": {
+            'type': 'object',
+            'properties': {
+                'reasoning': {
+                    'type': 'string',
+                    'description': "Step-by-step reasoning for the curation decisions"
+                },
+                'operations': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {
+                                'type': 'string',
+                                'description': "Type of operation: ADD, UPDATE, TAG, or REMOVE",
+                                'enum': ['ADD', 'UPDATE', 'TAG', 'REMOVE']
+                            },
+                            'section': {
+                                'type': 'string',
+                                'description': "Section of the playbook to modify"
+                            },
+                            'content': {
+                                'type': 'string',
+                                'description': "Content to add or update (optional for some operations)"
+                            },
+                            'bullet_id': {
+                                'type': 'string',
+                                'description': "ID of the bullet point to modify (required for UPDATE, TAG, REMOVE)"
+                            },
+                            'metadata': {
+                                'type': 'object',
+                                'description': "Metadata with helpful/harmful scores",
+                                'additionalProperties': {'type': 'integer'}
+                            }
+                        },
+                        'required': ['type', 'section'],
+                        'additionalProperties': False,
+                    },
+                    'description': "List of delta operations to apply to the playbook",
+                },
+            },
+            'required': ['reasoning', 'operations'],
+            'additionalProperties': False,
+        }
+    }
+},]

@@ -120,8 +120,14 @@ class Evolver:
             logger.info(f"Iteration {iteration} reflector judgement: {correctness}")
 
             # 5. CURATE: Update playbook
+            try:
+                question = task['item']['question']
+            except:
+                raw_msg = task['item']['messages'][1]["content"]
+                question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg
+
             curator_output = self.curator.curate(
-                question_context=task.get("question", ""),
+                question_context=question,
                 playbook=self.playbook,
                 reflector_output=reflector_output,
             )

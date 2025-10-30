@@ -5,8 +5,7 @@ from evolve.llm import LLMClient
 from evolve.playbook import Playbook
 from evolve.reflector import ReflectorOutput
 from evolve.delta import DeltaBatch
-from evolve.curator_prompt import CURATOR_PROMPT
-from evolve.schema_utils import create_response_format
+from evolve.curator_prompt import CURATOR_SYSTEM_PROMPT, CURATOR_TEMPLATE, CURATOR_TOOLS
 
 from logger import setup_logging
 logger = setup_logging(name=__name__, level=5)
@@ -16,14 +15,6 @@ class CuratorOutput:
     delta: DeltaBatch
     raw: Dict[str, Any]
 
-# Generate response format from DeltaBatch dataclass
-response_format = create_response_format(
-    DeltaBatch,
-    schema_name="curator_schema",
-    # required_fields=["reasoning"],
-    exclude_fields=[]
-)
-
 
 class Curator:
     """Transforms reflections into delta updates."""
@@ -31,10 +22,12 @@ class Curator:
     def __init__(
         self,
         llm: LLMClient,
-        prompt_template: str = CURATOR_PROMPT,
+        curator_system_prompt: str = CURATOR_SYSTEM_PROMPT,
+        curator_template: str = CURATOR_TEMPLATE,
     ) -> None:
         self.llm = llm
-        self.prompt_template = prompt_template
+        self.curator_system_prompt = curator_system_prompt
+        self.curator_template = curator_template
 
     def curate(
         self,
@@ -43,34 +36,36 @@ class Curator:
         reflector_output: ReflectorOutput,
     ) -> CuratorOutput:
 
-        prompt = self.prompt_template.format(
-            response_format=response_format,
+        prompt = self.curator_template.format(
             question_context=question_context,
             current_playbook=playbook.as_prompt() or "(empty playbook)",
             current_reflections=reflector_output.raw,
         )
 
+        logger.debug(f">>>>>>>>>>> curator received prompt:{prompt}.")
         response = self.llm.completion(
-            messages=[{
-                "role": "user",
-                "content": prompt,
-            }],
-            response_format=response_format,
+            messages=[
+                {"role": "system", "content": self.curator_system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            tools=CURATOR_TOOLS,
         )
-        reasoning, rest = self.llm.parse_response(response)
+        logger.debug(f">>>>>>>>>> curator response:{response}.")
         try:
-            data = json.loads(rest)
+            curation_data = response.choices[0].message.tool_calls[0].function.arguments
+            data = json.loads(curation_data)
         except Exception as e:
             logger.error(f"Unexpected error parsing curator response: {e}")
-            logger.error(f"Raw response content (first 500 chars): {rest[:500]}")
+            logger.error(f"Raw response content: {response}")
             # Create a fallback data object for unexpected errors
             data = {
+                "reasoning": "Failed.",
+                "operations": [],
                 "error": "Curator encountered unexpected error",
             }
             logger.warning("Using fallback curator output due to unexpected error")
 
-        logger.debug(f"Curator reasoning: {reasoning}.")
-        logger.debug(f"Curator ops: {data}.")
+        logger.debug(f"curator data:\n{data}.")
 
         delta = DeltaBatch.from_json(data)
 

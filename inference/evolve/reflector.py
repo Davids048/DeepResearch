@@ -54,11 +54,8 @@ class Reflector:
         trajectory:Dict,
         playbook: Playbook,
     ):
-        question = trajectory['question']
         prediction = trajectory['prediction']
         messages = trajectory['messages']
-        answer = trajectory['answer']
-        termination = trajectory['termination']
         consulted_playbook_section = "" #TODO: FILL THIS PART with generator's response
 
         # Format messages for better readability
@@ -71,7 +68,7 @@ class Reflector:
             current_playbook=playbook.as_prompt() or "(empty playbook)",
             playbook_excerpt=consulted_playbook_section,
         )
-            prediction=prediction,
+        logger.debug(f">>>>>>>>>>> reflector received prompt:{prompt}.")
         response = self.llm.completion(
             messages=[
                 {"role": "system", "content": REFLECTOR_SYSTEM_PROMPT},
@@ -79,20 +76,18 @@ class Reflector:
             ],
             tools=REFLECTION_TOOLS,
         )
-        reasoning, rest = self.llm.parse_response(response)
+        logger.debug(f">>>>>>>>>> reflector response:{response}.")
         try:
-            data = json.loads(rest)
+            reflection_data = response.choices[0].message.tool_calls[0].function.arguments
+            data = json.loads(reflection_data)
         except Exception as e:
             logger.error(f"Unexpected error parsing reflector response: {e}")
-            logger.error(f"Raw response content: {rest}")
+            logger.error(f"Raw response content: {response}")
             # Create a fallback data object for unexpected errors
             data = {
                 "error": "Reflector encountered unexpected error",
             }
             logger.warning("Using fallback reflector output due to unexpected error")
-
-        logger.debug(f"reflector reasoning: {reasoning}.")
-        logger.debug(f"reflector json:\n{data}.")
 
         # Create bullet tags
         bullet_tags: List[BulletTag] = []
@@ -120,8 +115,4 @@ class Reflector:
 
 
         return reflector_output
-
-            
-
-
 
