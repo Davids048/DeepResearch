@@ -36,52 +36,55 @@ Agent's Message End
 {playbook_excerpt}
 """
 
-
-REFLECTION_TOOLS = [{
-    "type": "function",
-    "function": {
-        "name": "output_json_reflection",
-        "description": "Output a json object of the reflection on the task agent's trajectory.",
-        "parameters": {
-            'type': 'object',
-            'properties': {
-                'reasoning': {
-                    'type': 'string',
-                    'description': "Your reasoning here."
-                },
-                'error_identification': {
-                    'type': 'string',
-                    'description': "What specifically went wrong in the reasoning? If reasoning is correct, state 'None'.",
-                },
-                'root_cause_analysis': {
-                    'type': 'string',
-                    'description': "Why did this error occur? What concept was misunderstood?  If reasoning is correct, state 'None'.",
-                },
-                'correct_approach': {
-                    'type': 'string',
-                    'description': 'what should have been done (If reasoning is correct, what the agent do right)',
-                },
-                'key_insight': {
-                    'type': 'string',
-                    'description': 'Reusable takeaways from this reflection',
-                },
-                'correctness_judgement': {
-                    'type': 'string',
-                    'description': 'Judgement on the correctness of the prediction. Options: correct|incorrect|incomplete',
-                },
-                'bullet_tags': {
-                    'type': 'array',
-                    'items': {
-                        'type': 'object',
-                        'properties': {'id': {'type': 'string', 'description': ''}, 'tag': {'type': 'string', 'description': ''}},
-                        'additionalProperties': False,
-                    },
-                    'description': "List of {'id': '<bullet-id>', 'tag': 'helpful|harmful|neutral'}",
-                },
+REFLECTION_TOOLS_PLAIN = [{
+    "name": "output_json_reflection",
+    "description": "Output a json object of the reflection on the task agent's trajectory.",
+    "parameters": {
+        'type': 'object',
+        'properties': {
+            'reasoning': {
+                'type': 'string',
+                'description': "Your reasoning here."
             },
-            'required': ['error_identification', 'root_cause_analysis', 'correct_approach', 'key_insight', 'correctness_judgement', 'bullet_tags'],
-            'additionalProperties': False,
-        }
+            'error_identification': {
+                'type': 'string',
+                'description': "What specifically went wrong in the reasoning? If reasoning is correct, state 'None'.",
+            },
+            'root_cause_analysis': {
+                'type': 'string',
+                'description': "Why did this error occur? What concept was misunderstood?  If reasoning is correct, state 'None'.",
+            },
+            'correct_approach': {
+                'type': 'string',
+                'description': 'what should have been done (If reasoning is correct, what the agent do right)',
+            },
+            'key_insight': {
+                'type': 'string',
+                'description': 'Reusable takeaways from this reflection',
+            },
+            'correctness_judgement': {
+                'type': 'string',
+                'description': 'Judgement on the correctness of the prediction. Options: correct|incorrect|incomplete',
+            },
+            'bullet_tags': {
+                'type': 'array',
+                'items': {
+                    'type': 'object',
+                    'properties': {'id': {'type': 'string', 'description': ''}, 'tag': {'type': 'string', 'description': ''}},
+                    'additionalProperties': False,
+                },
+                'description': "List of {'id': '<bullet-id>', 'tag': 'helpful|harmful|neutral'}",
+            },
+        },
+        'required': ['error_identification', 'root_cause_analysis', 'correct_approach', 'key_insight', 'correctness_judgement', 'bullet_tags'],
+        'additionalProperties': False,
     }
-},]
+}]
+
+REFLECTION_TOOLS = [
+    {
+        "type": "function",
+        "function": tool  
+    } for tool in REFLECTION_TOOLS_PLAIN
+]
 

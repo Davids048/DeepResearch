@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 import json
+from pathlib import Path
 from typing import Any, Dict, Union, List
-from evolve.llm import LLMClient
+
+from transformers import AutoTokenizer
+from evolve.llm import DEFAULT_COMPLETION_CONFIG, LLMClient
 from evolve.playbook import Playbook
 from evolve.reflector import ReflectorOutput
 from evolve.delta import DeltaBatch
-from evolve.curator_prompt import CURATOR_SYSTEM_PROMPT, CURATOR_TEMPLATE, CURATOR_TOOLS
+from evolve.curator_prompt import CURATOR_SYSTEM_PROMPT, CURATOR_TEMPLATE, CURATOR_TOOLS, CURATOR_TOOLS_PLAIN
 
 from logger import setup_logging
 logger = setup_logging(name=__name__, level=5)
@@ -43,17 +46,39 @@ class Curator:
         )
 
         logger.debug(f">>>>>>>>>>> curator received prompt:{prompt}.")
-        response = self.llm.completion(
-            messages=[
-                {"role": "system", "content": self.curator_system_prompt},
+        if "glm" not in self.llm.model_name.lower():
+            raise NotImplementedError()
+
+        # Apply prompt 
+        tok = AutoTokenizer.from_pretrained("zai-org/GLM-4.6")
+        tpl = Path("template.jinja").read_text()
+        tok.chat_template = tpl
+        prompt = tok.apply_chat_template(
+            [
+                {"role": "system", "content": CURATOR_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            tools=CURATOR_TOOLS,
+            tools = CURATOR_TOOLS,
+            tokenize=False,
+            enable_thinking=True,
+            add_generation_prompt=True,
         )
-        logger.debug(f">>>>>>>>>> curator response:{response}.")
+        # Plain generation
+        response = self.llm.client.completions.create(
+            model=self.llm.model_name,
+            prompt = prompt,
+            **DEFAULT_COMPLETION_CONFIG,
+        )
+        response = response.choices[0].text
+
+        logger.debug(f">>>>>>>>>> reflector response:{response}.")
         try:
-            curation_data = response.choices[0].message.tool_calls[0].function.arguments
-            data = json.loads(curation_data)
+            # GLM is using pure text handling.
+            from parse_tools_utils import parse_model_response
+            parsed_response = parse_model_response(response, CURATOR_TOOLS_PLAIN)
+            reasoning_content = parsed_response.get("reasoning_content", "")
+            tool_calls = parsed_response.get("tool_calls", [])
+            data = tool_calls[0]["arguments"]
         except Exception as e:
             logger.error(f"Unexpected error parsing curator response: {e}")
             logger.error(f"Raw response content: {response}")

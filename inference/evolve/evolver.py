@@ -102,6 +102,20 @@ class Evolver:
                 reflection=previous_reflection_text,
             )
 
+            # trajectory = {
+            #     "question": task.get('item', {}).get('question', 'Mock question'),
+            #     "answer": task.get('item', {}).get('answer', 'Mock answer'),
+            #     "messages": [
+            #         {"role": "system", "content": "You are a helpful assistant."},
+            #         {"role": "user", "content": task.get('item', {}).get('question', 'Mock question')},
+            #         {"role": "assistant", "reasoning_content": "Let me think about this question.", "tool_calls": []},
+            #         {"role": "assistant", "reasoning_content": "Based on my analysis, the answer is: Mock answer", "tool_calls": [{"name": "finish", "arguments": {}}]},
+            #     ],
+            #     "prediction": "Mock answer",
+            #     "termination": "answer",
+            #     "rounds": 2,
+            # }
+
             logger.debug(f"Task agent finished iteration {iteration}")
 
             # 2. REFLECT: Evaluate the attempt

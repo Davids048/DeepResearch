@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
 import json
+from pathlib import Path
 from typing import Dict, List, Any, Sequence
-from evolve.llm import LLMClient
-from evolve.reflector_prompt import REFLECTOR_SYSTEM_PROMPT, REFLECTOR_TEMPLATE, REFLECTION_TOOLS
+
+from transformers import AutoTokenizer
+from evolve.llm import DEFAULT_COMPLETION_CONFIG, LLMClient
+from evolve.reflector_prompt import REFLECTION_TOOLS_PLAIN, REFLECTOR_SYSTEM_PROMPT, REFLECTOR_TEMPLATE, REFLECTION_TOOLS
 from evolve.schema_utils import create_response_format
 from evolve.playbook import BulletTag, Playbook
 from evolve.utils import format_messages
@@ -69,20 +72,41 @@ class Reflector:
             playbook_excerpt=consulted_playbook_section,
         )
         logger.debug(f">>>>>>>>>>> reflector received prompt:{prompt}.")
-        response = self.llm.completion(
-            messages=[
+        if "glm" not in self.llm.model_name.lower():
+            raise NotImplementedError()
+
+        # Apply prompt 
+        tok = AutoTokenizer.from_pretrained("zai-org/GLM-4.6")
+        tpl = Path("template.jinja").read_text()
+        tok.chat_template = tpl
+        prompt = tok.apply_chat_template(
+            [
                 {"role": "system", "content": REFLECTOR_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            tools=REFLECTION_TOOLS,
+            tools = REFLECTION_TOOLS,
+            tokenize=False,
+            enable_thinking=True,
+            add_generation_prompt=True,
         )
+        # Plain generation
+        response = self.llm.client.completions.create(
+            model=self.llm.model_name,
+            prompt = prompt,
+            **DEFAULT_COMPLETION_CONFIG,
+        )
+        response = response.choices[0].text
+
         logger.debug(f">>>>>>>>>> reflector response:{response}.")
         try:
-            reflection_data = response.choices[0].message.tool_calls[0].function.arguments
-            data = json.loads(reflection_data)
+            # GLM is using pure text handling.
+            from parse_tools_utils import parse_model_response
+            parsed_response = parse_model_response(response, REFLECTION_TOOLS_PLAIN)
+            reasoning_content = parsed_response.get("reasoning_content", "")
+            tool_calls = parsed_response.get("tool_calls", [])
+            data = tool_calls[0]["arguments"]
         except Exception as e:
             logger.error(f"Unexpected error parsing reflector response: {e}")
-            logger.error(f"Raw response content: {response}")
             # Create a fallback data object for unexpected errors
             data = {
                 "error": "Reflector encountered unexpected error",

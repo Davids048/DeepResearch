@@ -51,10 +51,8 @@ Current Playbook:
 Current Reflections (principles and strategies that helped to achieve current task):
 {current_reflections}
 """
-
-CURATOR_TOOLS = [{
-    "type": "function",
-    "function": {
+CURATOR_TOOLS_PLAIN = [
+    {
         "name": "output_json_curation",
         "description": "Output a json object of the curation operations to apply to the playbook.",
         "parameters": {
@@ -102,4 +100,8 @@ CURATOR_TOOLS = [{
             'additionalProperties': False,
         }
     }
-},]
+]
+CURATOR_TOOLS = [{
+    "type": "function",
+    "function": tool,
+} for tool in CURATOR_TOOLS_PLAIN]
