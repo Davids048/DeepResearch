@@ -14,13 +14,7 @@ def format_messages(messages: List[Dict]) -> str:
         if i == 0:
             # skip system message
             continue
-
-        role = msg.get("role", "unknown")
-        content = msg.get("content", "")
-
-        formatted_lines.append(f"Role: {role}")
-        formatted_lines.append(f"Message: {content}")
-        formatted_lines.append("")
+        formatted_lines.append(f"{msg}")
 
     return "\n".join(formatted_lines)
 

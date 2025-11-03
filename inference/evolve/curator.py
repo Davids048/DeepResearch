@@ -70,8 +70,9 @@ class Curator:
             **DEFAULT_COMPLETION_CONFIG,
         )
         response = response.choices[0].text
+        response = "<think>" + response
 
-        logger.debug(f">>>>>>>>>> reflector response:{response}.")
+        logger.debug(f">>>>>>>>>> curator response:{response}.")
         try:
             # GLM is using pure text handling.
             from parse_tools_utils import parse_model_response
@@ -79,6 +80,7 @@ class Curator:
             reasoning_content = parsed_response.get("reasoning_content", "")
             tool_calls = parsed_response.get("tool_calls", [])
             data = tool_calls[0]["arguments"]
+            data["reasoning_content"] = reasoning_content
         except Exception as e:
             logger.error(f"Unexpected error parsing curator response: {e}")
             logger.error(f"Raw response content: {response}")

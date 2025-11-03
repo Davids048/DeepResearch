@@ -26,7 +26,6 @@ Task Context: “Find money sent to roommates since Jan 1 this year”
 Current Playbook: [Basic API usage guidelines]  
 Reflections: “The agent failed because it tried to identify roommates by parsing Venmo transaction descriptions instead of using the Phone app’s contact relationships. This led to incorrect identification and wrong results.”  Response:
 {{
-    "reasoning": "The reflection shows a critical error where the agent used unreliable heuristics (transaction descriptions) instead of the authoritative source (Phone app contacts) to identify relationships. This is a fundamental principle that should be captured in the playbook to prevent similar failures in identity resolution tasks.",
     "operations": [
         {{ 
             "type": "ADD",
@@ -58,10 +57,6 @@ CURATOR_TOOLS_PLAIN = [
         "parameters": {
             'type': 'object',
             'properties': {
-                'reasoning': {
-                    'type': 'string',
-                    'description': "Step-by-step reasoning for the curation decisions"
-                },
                 'operations': {
                     'type': 'array',
                     'items': {
@@ -96,7 +91,7 @@ CURATOR_TOOLS_PLAIN = [
                     'description': "List of delta operations to apply to the playbook",
                 },
             },
-            'required': ['reasoning', 'operations'],
+            'required': ['operations'],
             'additionalProperties': False,
         }
     }

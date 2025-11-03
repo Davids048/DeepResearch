@@ -42,10 +42,6 @@ REFLECTION_TOOLS_PLAIN = [{
     "parameters": {
         'type': 'object',
         'properties': {
-            'reasoning': {
-                'type': 'string',
-                'description': "Your reasoning here."
-            },
             'error_identification': {
                 'type': 'string',
                 'description': "What specifically went wrong in the reasoning? If reasoning is correct, state 'None'.",
