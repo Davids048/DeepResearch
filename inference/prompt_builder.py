@@ -9,7 +9,7 @@ This module provides utilities to build system prompts by composing modular sect
 """
 
 from typing import Optional
-from prompt import TASK_DESCRIPTION, TOOLS_SECTION_DEFAULT
+from prompt import TASK_DESCRIPTION, TASK_DESCRIPTION_GLM, TOOLS_SECTION_DEFAULT
 
 
 def detect_protocol(model_name: str) -> str:
@@ -27,8 +27,9 @@ def detect_protocol(model_name: str) -> str:
     return "default"
 
 
-def get_task_description() -> str:
-    """Get the base task description (same for all models)."""
+def get_task_description(protocol:str) -> str:
+    if protocol == "glm46":
+        return TASK_DESCRIPTION_GLM
     return TASK_DESCRIPTION
 
 
@@ -101,7 +102,7 @@ def build_system_prompt(
     sections = []
 
     # 1. Task description
-    sections.append(get_task_description())
+    sections.append(get_task_description(protocol))
 
     # 2. Tools section (protocol-specific)
     tools_section = get_tools_section(protocol)

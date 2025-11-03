@@ -4,6 +4,10 @@
 
 TASK_DESCRIPTION = """You are a deep research assistant. Your core function is to conduct thorough, multi-source investigations into any topic. You must handle both broad, open-domain inquiries and queries within specialized academic fields. For every request, synthesize information from credible, diverse sources to deliver a comprehensive, accurate, and objective response. When you have gathered sufficient information and are ready to provide the definitive response, you must enclose the entire final answer within <answer></answer> tags."""
 
+TASK_DESCRIPTION_GLM = """You are a deep research assistant. Your core function is to conduct thorough, multi-source investigations into any topic. You must handle both broad, open-domain inquiries and queries within specialized academic fields. For every request, synthesize information from credible, diverse sources to deliver a comprehensive, accurate, and objective response. 
+
+When you have gathered sufficient information and are ready to provide the definitive response, you must provide a final answer, and call the 'finish' tool to indicate that you have completed the task. """
+
 TOOLS_SECTION_DEFAULT = """
 # Tools
 

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import json5
 import os
 from typing import Dict, Iterator, List, Literal, Optional, Tuple, Union
@@ -13,6 +14,7 @@ from qwen_agent.llm.schema import ASSISTANT, DEFAULT_SYSTEM_MESSAGE, Message
 from qwen_agent.settings import MAX_LLM_CALL_PER_RUN
 from qwen_agent.tools import BaseTool
 from qwen_agent.utils.utils import format_as_text_message, merge_generate_cfgs
+from prompt_openai_tools import TOOLS_OPENAI, TOOLS_GLM, TOOLS_GLM_PLAIN
 from prompt import *
 from prompt_builder import build_system_prompt, get_protocol_for_model
 import time
@@ -69,10 +71,10 @@ class MultiTurnReactAgent(FnCallAgent):
         Protocol method: Call vLLM server with appropriate parameters.
         Dispatches to model-specific implementation based on detected protocol.
         """
-        logger.debug(f"Calling server with protocol: {self.protocol}")
-
-        if self.protocol in ["minimaxm2", "glm46"]:
+        if self.protocol in ["minimaxm2"]:
             return self._call_server_openai_tools(msgs, planning_port, max_tries)
+        elif self.protocol == "glm46":
+            return self._call_server_plain(msgs, planning_port, max_tries)
         elif self.protocol == "default":
             return self._call_server_default(msgs, planning_port, max_tries)
         else:
@@ -85,8 +87,10 @@ class MultiTurnReactAgent(FnCallAgent):
 
         tool_calls_list format: [{"name": str, "arguments": dict}, ...]
         """
-        if self.protocol in ["minimaxm2", "glm46"]:
+        if self.protocol in ["minimaxm2"]:
             return self._parse_and_extract_tools_openai_tools(response, round)
+        elif self.protocol == "glm46":
+            return self._parse_and_extract_tools_plain(response, round)
         elif self.protocol == "default":
             return self._parse_and_extract_tools_default(response, round)
         else:
@@ -100,13 +104,21 @@ class MultiTurnReactAgent(FnCallAgent):
         """Protocol method: Count tokens with model-specific template"""
         tokenizer = AutoTokenizer.from_pretrained(self.llm_local_path)
 
-        if self.protocol in ["minimaxm2", "glm46"]:
+        if self.protocol in ["minimaxm2"]:
             # Include tools in token count for models using OpenAI tool format
             from prompt_openai_tools import TOOLS_OPENAI
             full_prompt = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
                 tools=TOOLS_OPENAI
+            )
+        elif self.protocol == "glm46":
+            tpl = Path("template.jinja").read_text()
+            tokenizer.chat_template = tpl
+            full_prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                tools=TOOLS_GLM
             )
         else:
             full_prompt = tokenizer.apply_chat_template(messages, tokenize=False)
@@ -177,10 +189,6 @@ class MultiTurnReactAgent(FnCallAgent):
         Default protocol: Parse JSON from <tool_call> tags.
         Returns: (content_str, tool_calls_list)
         """
-        # Log response preview
-        content_preview = content[:200].replace('\n', ' ') + ('...' if len(content) > 200 else '')
-        logger.info(f'Round {round} response preview: {content_preview}')
-
         # Clean up <tool_response> if present
         if '<tool_response>' in content:
             pos = content.find('<tool_response>')
@@ -229,6 +237,70 @@ class MultiTurnReactAgent(FnCallAgent):
     # OPENAI TOOLS PROTOCOL IMPLEMENTATION
     # Used by: MiniMax-M2, GLM-4.6
     # ==========================================
+    def _call_server_plain(self, msgs, planning_port, max_tries=10):
+        """OpenAI Tools protocol: Use vLLM/sglang tool calling API with automatic parsing"""
+        logger.critical("Using _call_server_plain")
+
+        openai_api_key = "EMPTY"
+        openai_api_base = f"http://127.0.0.1:{planning_port}/v1"
+
+        client = OpenAI(
+            api_key=openai_api_key,
+            base_url=openai_api_base,
+            timeout=600.0,
+        )
+
+        base_sleep_time = 1
+
+        # Reformat msgs based on chat template. 
+        tok = AutoTokenizer.from_pretrained("zai-org/GLM-4.6")
+        tpl = Path("template.jinja").read_text()
+        tok.chat_template = tpl
+        prompt = tok.apply_chat_template(
+            msgs,
+            tools = TOOLS_GLM,
+            tokenize=False,
+            enable_thinking=True,
+            add_generation_prompt=True,
+        )
+        
+
+        for attempt in range(max_tries):
+            try:
+                logger.info(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
+                response = client.completions.create(
+                    model=self.model,
+                    prompt = prompt,
+                    temperature=self.llm_generate_cfg.get('temperature', 0.6),
+                    top_p=self.llm_generate_cfg.get('top_p', 0.95),
+                    max_tokens=10000,
+                    presence_penalty=self.llm_generate_cfg.get('presence_penalty', 1.1)
+                )
+                message = response.choices[0].text
+
+                if message:
+                    logger.info("--- Service call successful, received a valid response ---")
+                    logger.warning(f"appending <think> token for later parsing.")
+                    return '<think>' + message
+                else:
+                    logger.info(f"Warning: Attempt {attempt + 1} received an empty response.")
+
+            except (APIError, APIConnectionError, APITimeoutError) as e:
+                logger.info(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
+            except Exception as e:
+                logger.info(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
+
+            if attempt < max_tries - 1:
+                sleep_time = base_sleep_time * (2 ** attempt) + random.uniform(0, 1)
+                sleep_time = min(sleep_time, 30)
+
+                logger.info(f"Retrying in {sleep_time:.2f} seconds...")
+                time.sleep(sleep_time)
+            else:
+                logger.info("Error: All retry attempts have been exhausted. The call has failed.")
+
+        return None
+
 
     def _call_server_openai_tools(self, msgs, planning_port, max_tries=10):
         """OpenAI Tools protocol: Use vLLM/sglang tool calling API with automatic parsing"""
@@ -281,6 +353,19 @@ class MultiTurnReactAgent(FnCallAgent):
 
         return None
 
+    def _parse_and_extract_tools_plain(self, text, round):
+        from parse_tools_utils import parse_model_response
+        parsed_response = parse_model_response(text, TOOLS_GLM_PLAIN)
+
+        reasoning_content = parsed_response.get("reasoning_content", "")
+        tool_calls = parsed_response.get("tool_calls", [])
+
+        # example:
+        # browser.search
+        # {'query': '"compulsory" school reading 2017 African country novel'}
+        return reasoning_content, tool_calls
+
+
     def _parse_and_extract_tools_openai_tools(self, message, round):
         """
         OpenAI Tools protocol: Extract content and tool calls from vLLM/sglang response.
@@ -293,10 +378,6 @@ class MultiTurnReactAgent(FnCallAgent):
 
         content = message.content or ""
         vllm_tool_calls = message.tool_calls
-
-        # Log response preview
-        content_preview = content[:200].replace('\n', ' ') + ('...' if len(content) > 200 else '')
-        logger.info(f'Round {round} response preview: {content_preview}')
 
         # Convert vLLM tool calls to internal format
         tool_calls = []
@@ -353,6 +434,8 @@ class MultiTurnReactAgent(FnCallAgent):
 
         num_llm_calls_available = MAX_LLM_CALL_PER_RUN
         round = 0
+        answer_found = False
+        prediction = ""
         while num_llm_calls_available > 0:
             # Check whether time is reached
             elapsed_time = time.time() - start_time
@@ -377,18 +460,30 @@ class MultiTurnReactAgent(FnCallAgent):
 
             # 2. Parse and extract tools (protocol-specific)
             content, tool_calls = self.parse_and_extract_tools(response, round)
-            assistant_msg = f"{content}\n<tool_call>\n{tool_calls}\n</tool_call>"
+            assistant_msg = {
+                "role": "assistant",
+                "reasoning_content": content,
+                "tool_calls": tool_calls,
+            }
+            logger.debug(f"reasoning_content: {content}")
+            logger.debug(f"tool calls: {tool_calls}")
 
             # 3. Add assistant message
-            messages.append({"role": "assistant", "content": assistant_msg})
+            messages.append(assistant_msg)
 
             # 4. Execute tool calls (protocol-agnostic)
             if tool_calls:
+                tool_results = []
                 for tc in tool_calls:
+                    assert isinstance(tc, dict)
                     if tc["name"] == "error":
                         # Error during parsing
                         result = tc["result"]
                         logger.error(f"Round {round}: Tool parsing error: {result}")
+                    elif tc["name"] == "finish":
+                        logger.info(f"Round {round}: Answer found.")
+                        answer_found = True
+                        result = "answer found"
                     else:
                         # Execute tool
                         try:
@@ -397,22 +492,25 @@ class MultiTurnReactAgent(FnCallAgent):
                             result = f"Error calling tool {tc['name']}: {str(e)}"
                             logger.error(f"Round {round}: Tool execution error - {str(e)[:100]}")
 
-                    # Format and log result
-                    result_formatted = f"<tool_response>\n{result}\n</tool_response>"
-                    result_preview = result[:150].replace('\n', ' ') + ('...' if len(result) > 150 else '')
-                    logger.info(f"Round {round}: Tool result preview: {result_preview}")
-
-                    # Add to messages
-                    messages.append({"role": "user", "content": result_formatted})
+                    tool_results.append(result)
+                # Add to messages
+                messages.append({
+                    "role":"tool",
+                    "content": [
+                        {"output": out} for out in tool_results
+                    ] 
+                })
 
             # 5. Check for answer (protocol-agnostic)
-            if '<answer>' in content and '</answer>' in content:
-                answer_text = content.split('<answer>')[1].split('</answer>')[0]
-                logger.info(f"Round {round}: Answer found - {answer_text[:100]}{'...' if len(answer_text) > 100 else ''}")
-                termination = 'answer'
+            if answer_found:
+                prediction = content
                 break
+            # if '<answer>' in content and '</answer>' in content:
+            #     termination = 'answer'
+            #     break
 
-            if num_llm_calls_available <= 0 and '<answer>' not in content:
+            # if num_llm_calls_available <= 0 and '<answer>' not in content:
+            if num_llm_calls_available <= 0 and not answer_found:
                 messages[-1]['content'] = 'Sorry, the number of llm calls exceeds the limit.'
                 logger.warning(f"Round {round}: LLM call limit reached")
 
@@ -454,8 +552,10 @@ class MultiTurnReactAgent(FnCallAgent):
                 return result
 
         # Extract final prediction
-        if '<answer>' in messages[-1]['content']:
-            prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
+        # if '<answer>' in messages[-1]['content']:
+        #     prediction = messages[-1]['content'].split('<answer>')[1].split('</answer>')[0]
+        #     termination = 'answer'
+        if answer_found and prediction:
             termination = 'answer'
         else:
             prediction = 'No answer found.'
@@ -483,7 +583,7 @@ class MultiTurnReactAgent(FnCallAgent):
 
     def custom_call_tool(self, tool_name: str, tool_args: dict, **kwargs):
         if tool_name in TOOL_MAP:
-            tool_args["params"] = tool_args
+            # tool_args["params"] = tool_args
             if "python" in tool_name.lower():
                 result = TOOL_MAP['PythonInterpreter'].call(tool_args)
             elif tool_name == "parse_file":

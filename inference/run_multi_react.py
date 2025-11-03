@@ -260,10 +260,10 @@ if __name__ == "__main__":
                             with open(output_file, "a", encoding="utf-8") as f:
                                 f.write(json.dumps(result, ensure_ascii=False) + "\n")
                     elif args.mode == "evolve":
-                        evolve_result = future.result()
+                        result = future.result()
                         with write_locks[rollout_idx]:
                             with open(output_file.replace(".jsonl", ".evolved.jsonl"), "a", encoding="utf-8") as f:
-                                f.write(json.dumps(evolve_result, ensure_ascii=False) + "\n")
+                                f.write(json.dumps(result, ensure_ascii=False) + "\n")
                     else:
                         raise NotImplementedError()
                     ###############################

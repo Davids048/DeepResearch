@@ -4,6 +4,81 @@
 # - MiniMax-M2 (vLLM automatically converts to M2's XML format)
 # - GLM-4.6 (sglang with --tool-call-parser glm45)
 # - Other models with similar tool calling support
+TOOLS_GLM_PLAIN = [
+    {
+        "name": "search",
+        "description": "Perform Google web searches then returns a string of the top search results. Accepts multiple queries.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "description": "The search query."
+                    },
+                    "minItems": 1,
+                    "description": "The list of search queries."
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "visit",
+        "description": "Visit webpage(s) and return the summary of the content.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "The URL(s) of the webpage(s) to visit. Can be a single URL or an array of URLs."
+                },
+                "goal": {
+                    "type": "string",
+                    "description": "The specific information goal for visiting webpage(s)."
+                }
+            },
+            "required": ["url", "goal"]
+        }
+    },
+    {
+        "name": "visit",
+        "description": "Visit webpage(s) and return the summary of the content.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "The URL(s) of the webpage(s) to visit. Can be a single URL or an array of URLs."
+                },
+                "goal": {
+                    "type": "string",
+                    "description": "The specific information goal for visiting webpage(s)."
+                }
+            },
+            "required": ["url", "goal"]
+        }
+    },
+    {
+        "name": "finish",
+        "description": "Finish the task. Use this function when you have found the information you need.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+]
+
+TOOLS_GLM = [
+    {
+        "type": "function",
+        "function": obj,
+    } for obj in TOOLS_GLM_PLAIN
+]
 
 TOOLS_OPENAI = [
     {
