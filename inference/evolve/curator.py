@@ -39,10 +39,15 @@ class Curator:
         reflector_output: ReflectorOutput,
     ) -> CuratorOutput:
 
+        # Remove reflection reasoning content for less cluttering.
+        current_reflections = reflector_output.raw 
+        if "reasoning_content" in current_reflections.keys():
+            current_reflections.pop("reasoning_content", None)
+
         prompt = self.curator_template.format(
             question_context=question_context,
             current_playbook=playbook.as_prompt() or "(empty playbook)",
-            current_reflections=reflector_output.raw,
+            current_reflections=current_reflections,
         )
 
         logger.debug(f">>>>>>>>>>> curator received prompt:{prompt}.")

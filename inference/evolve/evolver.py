@@ -183,7 +183,7 @@ class Evolver:
             "final_prediction": last_iteration["trajectory"]["prediction"],
             "final_termination": last_iteration["trajectory"]["termination"],
             "final_reflector_judgement": last_iteration["reflector_judgement"],
-            "rounds": last_iteration["trajectory"]["rounds"],
+            "final_rounds": last_iteration["trajectory"]["rounds"],
             "history": history,
         }
 
