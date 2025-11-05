@@ -31,33 +31,6 @@ class Evolver:
         self.playbook = playbook or Playbook()
         #############################
 
-    @staticmethod
-    def _create_mock_playbook() -> Playbook:
-        """Create a mock playbook for debugging purposes.
-
-        Returns:
-            Playbook instance with sample strategic guidance
-        """
-        playbook = Playbook()
-
-        # Add mock bullet based on the debug example
-        playbook.add_bullet(
-            section="strategies_and_hard_rules",
-            content=(
-                "Prioritize factual accuracy by acknowledging uncertainty and avoiding fabrication. "
-                "When search tools fail or information is insufficient, explicitly state: "
-                "'I cannot verify [specific detail] with current constraints.' "
-                "Never invent names, dates, or biographical details. "
-                "Only state logical constraints derived from verified facts "
-                "(e.g., 'Without verified author identity, exact years cannot be determined, "
-                "but probation officer role must have ended before 2018 when lecturing began')."
-            ),
-            bullet_id="strategies_and_hard_rules-00001"
-        )
-        playbook._next_id=1
-
-        return playbook
-
 
     def evolve(
         self,
@@ -265,4 +238,32 @@ class Evolver:
 **Correctness Judgement:** correct
 
 **Action:** The previous attempt was successful. Use these insights as reference."""
+
+
+    @staticmethod
+    def _create_mock_playbook() -> Playbook:
+        """Create a mock playbook for debugging purposes.
+
+        Returns:
+            Playbook instance with sample strategic guidance
+        """
+        playbook = Playbook()
+
+        # Add mock bullet based on the debug example
+        playbook.add_bullet(
+            section="strategies_and_hard_rules",
+            content=(
+                "Prioritize factual accuracy by acknowledging uncertainty and avoiding fabrication. "
+                "When search tools fail or information is insufficient, explicitly state: "
+                "'I cannot verify [specific detail] with current constraints.' "
+                "Never invent names, dates, or biographical details. "
+                "Only state logical constraints derived from verified facts "
+                "(e.g., 'Without verified author identity, exact years cannot be determined, "
+                "but probation officer role must have ended before 2018 when lecturing began')."
+            ),
+            bullet_id="strategies_and_hard_rules-00001"
+        )
+        playbook._next_id=1
+
+        return playbook
 

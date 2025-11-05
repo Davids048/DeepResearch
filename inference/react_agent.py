@@ -239,7 +239,7 @@ class MultiTurnReactAgent(FnCallAgent):
     # ==========================================
     def _call_server_plain(self, msgs, planning_port, max_tries=10):
         """OpenAI Tools protocol: Use vLLM/sglang tool calling API with automatic parsing"""
-        logger.critical("Using _call_server_plain")
+        # logger.critical("Using _call_server_plain")
 
         openai_api_key = "EMPTY"
         openai_api_base = f"http://127.0.0.1:{planning_port}/v1"
@@ -267,7 +267,7 @@ class MultiTurnReactAgent(FnCallAgent):
 
         for attempt in range(max_tries):
             try:
-                logger.info(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
+                # logger.info(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
                 response = client.completions.create(
                     model=self.model,
                     prompt = prompt,
@@ -279,8 +279,8 @@ class MultiTurnReactAgent(FnCallAgent):
                 message = response.choices[0].text
 
                 if message:
-                    logger.info("--- Service call successful, received a valid response ---")
-                    logger.warning(f"appending <think> token for later parsing.")
+                    # logger.info("--- Service call successful, received a valid response ---")
+                    # logger.warning(f"appending <think> token for later parsing.")
                     return '<think>' + message
                 else:
                     logger.info(f"Warning: Attempt {attempt + 1} received an empty response.")
@@ -453,7 +453,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 return result
             round += 1
             num_llm_calls_available -= 1
-            logger.info(f"--- Round {round} starting (LLM calls remaining: {num_llm_calls_available}, elapsed: {elapsed_time/60:.1f}m) ---")
+            # logger.info(f"--- Round {round} starting (LLM calls remaining: {num_llm_calls_available}, elapsed: {elapsed_time/60:.1f}m) ---")
 
             # 1. Call server (protocol-specific)
             response = self.call_server(messages, planning_port)
@@ -465,8 +465,8 @@ class MultiTurnReactAgent(FnCallAgent):
                 "reasoning_content": content,
                 "tool_calls": tool_calls,
             }
-            logger.debug(f"reasoning_content: {content}")
-            logger.debug(f"tool calls: {tool_calls}")
+            # logger.debug(f"reasoning_content: {content}")
+            # logger.debug(f"tool calls: {tool_calls}")
 
             # 3. Add assistant message
             messages.append(assistant_msg)
@@ -517,7 +517,7 @@ class MultiTurnReactAgent(FnCallAgent):
             # 6. Token limit checking (protocol-agnostic)
             max_tokens = 110 * 1024
             token_count = self.count_tokens(messages)
-            logger.info(f"round: {round}, token count: {token_count}")
+            # logger.info(f"round: {round}, token count: {token_count}")
 
             # Log token usage when approaching limit
             if token_count > max_tokens * 0.8:
