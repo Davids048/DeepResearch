@@ -223,7 +223,9 @@ def single_round_statistics(input_file):
     termination_counts = {}
 
     try:
-        tokenizer = AutoTokenizer.from_pretrained(os.getenv("Qwen2_5_7B_PATH", ""))
+        # tokenizer = AutoTokenizer.from_pretrained(os.getenv("Qwen2_5_7B_PATH", ""))
+        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.6")
+
     except Exception as e: 
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
     
@@ -340,7 +342,8 @@ def single_round_statistics(input_file):
 def calculate_enhanced_statistics(round_results, round_items):
     
     try:
-        tokenizer = AutoTokenizer.from_pretrained(os.getenv("Qwen2_5_7B_PATH", ""))
+        # tokenizer = AutoTokenizer.from_pretrained(os.getenv("Qwen2_5_7B_PATH", ""))
+        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.6")
     except Exception as e: 
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
     
@@ -370,14 +373,18 @@ def calculate_enhanced_statistics(round_results, round_items):
             
             for msg in messages:
                 if msg['role'] == 'assistant':
-                    content = msg['content']
-
-                    think_content = content.split('<think>')[-1].split('</think>')[0]
-
-                    num_tool_use += 1
-                    
-                    assistant_tokens = count_tokens_with_tokenizer(think_content, tokenizer)
+                    reasoning_content = msg['reasoning_content']
+                    tool_calls = msg.get('tool_calls', [])
+                    num_tool_use += len(tool_calls)
+                    assistant_tokens = count_tokens_with_tokenizer(reasoning_content, tokenizer) 
                     question_assistant_tokens += assistant_tokens
+                
+                # if msg['role'] == 'assistant':
+                #     content = msg['content']
+                #     think_content = content.split('<think>')[-1].split('</think>')[0]
+                #     num_tool_use += 1
+                #     assistant_tokens = count_tokens_with_tokenizer(think_content, tokenizer)
+                #     question_assistant_tokens += assistant_tokens
             
             correct_tool_calls.append(num_tool_use)
             correct_assistant_tokens.append(question_assistant_tokens)
