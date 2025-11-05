@@ -9,7 +9,7 @@ from evolve.playbook import Playbook
 from prompt_builder import build_system_prompt
 
 from logger import setup_logging
-logger = setup_logging(name=__name__, level=5)
+logger = setup_logging(name=__name__, level=15)
 
 
 class Generator:

@@ -1,5 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 import os
+import random
 from typing import Optional
 from evolve.generator import Generator
 from evolve.reflector import Reflector, ReflectorOutput
@@ -11,7 +13,7 @@ from evolve.utils import get_glm_openai_client, get_glm_tokenizer
 from parse_tools_utils import parse_model_response
 from logger import setup_logging
 
-logger = setup_logging(name=__name__, level=5)
+logger = setup_logging(name=__name__, level=20)
 
 class Evolver:
     """A controller to manage the interaction between task agent, reflector, curators, memory (and other components)."""
@@ -219,33 +221,36 @@ class Evolver:
             logger.debug(f"Task agent finished iteration {iteration}")
 
             # 2. REFLECT: Evaluate the attempt
-            reflections = []
-            num_reflections = int(os.getenv("MAX_REFLECTIONS", 16))
-            for _ in range(num_reflections):
-                # Create reflector propmt
-                messages = trajectory["messages"]
-                prediction = trajectory["prediction"] 
-                from evolve.reflector_prompt import REFLECTOR_TEMPLATE_KFLOW
-                reflector_user_prompt = REFLECTOR_TEMPLATE_KFLOW.format(
-                    messages = messages,
-                    prediction = prediction,
-                )
-                tokenizer = get_glm_tokenizer()
-                prompt = tokenizer.apply_chat_template(
-                   [
-                        {"role": "system", "content": REFLECTOR_SYSTEM_PROMPT},
-                        {"role": "user", "content": reflector_user_prompt},
-                    ],
-                    tools = REFLECTION_KFLOW_TOOLS,
-                    tokenize=False,
-                    enable_thinking=True,
-                    add_generation_prompt=True,
-                )
-                client = get_glm_openai_client()
+            # Create reflector propmt
+            messages = trajectory["messages"]
+            prediction = trajectory["prediction"] 
+            from evolve.reflector_prompt import REFLECTOR_TEMPLATE_KFLOW
+            reflector_user_prompt = REFLECTOR_TEMPLATE_KFLOW.format(
+                messages = messages,
+                prediction = prediction,
+            )
+            tokenizer = get_glm_tokenizer()
+            prompt = tokenizer.apply_chat_template(
+               [
+                    {"role": "system", "content": REFLECTOR_SYSTEM_PROMPT},
+                    {"role": "user", "content": reflector_user_prompt},
+                ],
+                tools = REFLECTION_KFLOW_TOOLS,
+                tokenize=False,
+                enable_thinking=True,
+                add_generation_prompt=True,
+            )
+            client = get_glm_openai_client()
+            def _generate_single_reflection():
                 response = client.completions.create(
                     model="zai-org/GLM-4.6",
                     prompt = prompt,
-                    **DEFAULT_COMPLETION_CONFIG,
+                    # Use following params for more variety.
+                    temperature=1.2,
+                    top_p = 0.85,
+                    seed = random.randint(1,1000),
+                    max_tokens=16000,
+                    # **DEFAULT_COMPLETION_CONFIG,
                 )
                 response = response.choices[0].text
                 response = "<think>" + response
@@ -264,8 +269,18 @@ class Evolver:
                     data = {
                         "error": "Reflector encountered unexpected error",
                     }
-                reflections.append(data)
-
+                return data 
+            reflections = []
+            num_reflections = int(os.getenv("MAX_REFLECTIONS", 16))           
+            num_reflection_workers = int(os.getenv("MAX_REFLECTION_WORKERS", 16))           
+            with ThreadPoolExecutor(max_workers = num_reflection_workers) as executor:
+                futures = [executor.submit(_generate_single_reflection) for _ in range(num_reflections)]
+                for future in as_completed(futures):
+                    try:
+                        reflections.append(future.result())
+                    except Exception as e:
+                        logger.error(f"Reflection future failed: {e}.")
+                        reflections.append({"error": "Reflection failed"})
             # Aggregate the results - pickout the ones where reflector judge the trace as wrong. 
             error_reflections = []
             for reflection in reflections:
