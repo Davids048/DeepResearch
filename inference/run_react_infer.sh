@@ -3,6 +3,7 @@
 # Load environment variables from .env file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/../.env"
+EXP_ENV_FILE="$SCRIPT_DIR/../.env.exp"
 
 if [ ! -f "$ENV_FILE" ]; then
     echo "Error: .env file not found at $ENV_FILE"
@@ -11,9 +12,17 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
+if [ ! -f "$EXP_ENV_FILE" ]; then
+    echo "Error: .env file not found at $EXP_ENV_FILE"
+    echo "Please copy .env.example to .env and configure your settings:"
+    echo "  cp .env.example .env"
+    exit 1
+fi
+
 echo "Loading environment variables from .env file..."
 set -a  # automatically export all variables
 source "$ENV_FILE"
+source "$EXP_ENV_FILE"
 set +a  # stop automatically exporting
 
 # Validate critical variables
@@ -156,3 +165,28 @@ EOF
 else
     echo "Skipping wandb upload (either disabled or no run id found)."
 fi
+
+
+# Move debuglog and env.exp file into the experiment directory.
+# Extract the actual output directory from the debug log
+OUTPUT_DIR=$(grep -oP 'OUTPUT_DIR=\K.*' $DEBUG_LOG | tail -n1)
+
+if [ -n "$OUTPUT_DIR" ] && [ -d "$OUTPUT_DIR" ]; then
+    echo "Moving debug log and env.exp to experiment directory: $OUTPUT_DIR"
+
+    # Move debug log
+    if [ -f "$DEBUG_LOG" ]; then
+        mv "$DEBUG_LOG" "$OUTPUT_DIR/"
+        echo "Moved $DEBUG_LOG to $OUTPUT_DIR/"
+    fi
+
+    # Move env.exp file
+    if [ -f "$EXP_ENV_FILE" ]; then
+        cp "$EXP_ENV_FILE" "$OUTPUT_DIR/.env.exp"
+        echo "Copied .env.exp to $OUTPUT_DIR/"
+    fi
+else
+    echo "Warning: Could not determine output directory or directory does not exist. Debug log remains in
+ current directory."
+fi
+

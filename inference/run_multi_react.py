@@ -72,6 +72,7 @@ if __name__ == "__main__":
     dataset_dir = os.path.join(model_dir, args.dataset, datetime.now().strftime("%Y%m%d-%H%M%S"))
 
     os.makedirs(dataset_dir, exist_ok=True)
+    print(f"OUTPUT_DIR={dataset_dir}")
 
     print(f"Model name: {model_name}")
     print(f"Data set path: {args.dataset}")
