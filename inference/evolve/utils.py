@@ -1,4 +1,8 @@
+from pathlib import Path
 from typing import List, Dict
+from openai import OpenAI
+
+from transformers import AutoTokenizer
 
 def format_messages(messages: List[Dict]) -> str:
     """Format messages from trajectory into a structured, readable format for the reflector.
@@ -18,4 +22,17 @@ def format_messages(messages: List[Dict]) -> str:
 
     return "\n".join(formatted_lines)
 
+
+def get_glm_tokenizer():
+    tok = AutoTokenizer.from_pretrained("zai-org/GLM-4.6")
+    tpl = Path("template.jinja").read_text()
+    tok.chat_template = tpl
+    return tok
+
+
+def get_glm_openai_client():
+    return OpenAI(
+        api_key="EMPTY",
+        base_url="http://localhost:6000/v1",
+    )
 

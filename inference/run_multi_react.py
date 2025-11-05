@@ -36,7 +36,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default="evolve",
-        choices=["baseline", "evolve"],
+        choices=["baseline", "evolve", "evolve_kflow"],
         help="Mode to run: 'baseline' uses test_agent, 'evolve' uses evolver",
     )
     parser.add_argument(
@@ -242,6 +242,8 @@ if __name__ == "__main__":
                 run_func = lambda task: test_agent._run(task, model)
             elif args.mode == "evolve":
                 run_func = lambda task: evolver.evolve(task, max_iterations=args.max_iterations)
+            elif args.mode == "evolve_kflow":
+                run_func = lambda task: evolver.evolve_kflow(task, max_iterations=args.max_iterations)
             else:
                 raise NotImplementedError()
 
@@ -263,6 +265,11 @@ if __name__ == "__main__":
                         result = future.result()
                         with write_locks[rollout_idx]:
                             with open(output_file.replace(".jsonl", ".evolved.jsonl"), "a", encoding="utf-8") as f:
+                                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                    elif args.mode == "evolve_kflow":
+                        result = future.result()
+                        with write_locks[rollout_idx]:
+                            with open(output_file.replace(".jsonl", ".evolved_kflow.jsonl"), "a", encoding="utf-8") as f:
                                 f.write(json.dumps(result, ensure_ascii=False) + "\n")
                     else:
                         raise NotImplementedError()
@@ -307,6 +314,8 @@ if __name__ == "__main__":
                     wandb.save(output_file)
                 elif args.mode == "evolve":
                     wandb.save(output_file.replace(".jsonl", ".evolved.jsonl"))
+                elif args.mode == "evolve_kflow":
+                    wandb.save(output_file.replace(".jsonl", ".evolved_kflow.jsonl"))
                 else:
                     raise NotImplementedError()
                 ##################################

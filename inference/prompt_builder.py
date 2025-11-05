@@ -8,7 +8,7 @@ This module provides utilities to build system prompts by composing modular sect
 - Reflection section (optional, for evolver)
 """
 
-from typing import Optional
+from typing import List, Optional
 from prompt import TASK_DESCRIPTION, TASK_DESCRIPTION_GLM, TOOLS_SECTION_DEFAULT
 
 
@@ -81,11 +81,24 @@ def format_reflection_section(reflection: str) -> str:
 
     return section
 
+def format_knowledge_section(knowledge_history:List[dict])->str:
+    if not knowledge_history:
+        return ""
+    
+    section = "\n\n# Previous review list:"
+    for i, k in enumerate(knowledge_history):
+        trajectory_summary = k.get("trajectory_summary", "")
+        error_summary = k.get("summarized_error_report", "")
+        section += f"\n## review {i}:\n- Assistant Trajectory Summary: {trajectory_summary}\n- Error Report: {error_summary}.\n"
+
+    return section
+
 
 def build_system_prompt(
     model_name: str,
     playbook = None,
     reflection: Optional[str] = None,
+    knowledge_history = None,
 ) -> str:
     """
     Build a system prompt by composing modular sections.
@@ -121,7 +134,10 @@ def build_system_prompt(
         if reflection_section:
             sections.append(reflection_section)
 
-    sections.append("\nUsing the information above, solve the following task:\n")
+    if knowledge_history:
+        knowledge_section = format_knowledge_section(knowledge_history)
+        if knowledge_section:
+            sections.append(knowledge_section)
 
     # Compose all sections
     return "\n".join(sections)

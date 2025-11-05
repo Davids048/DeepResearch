@@ -84,3 +84,107 @@ REFLECTION_TOOLS = [
     } for tool in REFLECTION_TOOLS_PLAIN
 ]
 
+####################################################################################
+
+REFLECTOR_TEMPLATE_KFLOW = """
+Help me analyze the following trajectory step by step. Then answer whether the agent successfully completed the task.
+
+### Agent's Message Trajectory:
+===============================================================================
+{messages}
+===============================================================================
+Agent's Message End
+
+### Final agent Prediction:
+{prediction}
+
+"""
+
+REFLECTION_TOOLS_KFLOW_PLAIN = [{
+    "name": "output_json_reflection",
+    "description": "Output a json object of the reflection on the task agent's trajectory.",
+    "parameters": {
+        'type': 'object',
+        'properties': {
+            'trajectory_summary': {
+                'type': 'string',
+                'description': "A summary of how the agent reached the concluding answer, including the webpages and documents it looked up that supports its answer. (or the reasoning efforts it has taken if no answer was found)."
+            },
+            'error_report': {
+                'type': 'string',
+                'description': "If you conclude that the solution is problematic, or does not meet the user's request, explain why the solution is wrong in detail here. Start with 'The answer is wrong because...' and end with 'The correct approach is ...'. Explain in a standalone manner. If reasoning is correct, state 'None'.",
+            },
+            'correctness_judgement': {
+                'type': 'string',
+                'description': 'Judgement on the correctness of the prediction. Options: correct|incorrect|incomplete',
+            },
+        },
+        'required': [],
+        'additionalProperties': False,
+    }
+}]
+
+REFLECTION_KFLOW_TOOLS = [
+    {
+        "type": "function",
+        "function": tool  
+    } for tool in REFLECTION_TOOLS_KFLOW_PLAIN
+]
+
+COMPRESSION_SYSTEM_PROMPT = """
+You are an expert summarizer. Your task is to read multiple reviewer reports about an assistant's performance on a task and produce a single, coherent summary.
+
+# General Context
+You will be provided with the following materials:
+- The original question given to the assistant.
+- The final answer the assistant produced.
+- Multiple reviewer reports evaluating the assistant's reasoning process and answer, including identified issues and points of insight.
+
+# Key objectives:
+- Preserve all important analytical content in the reviewer reports, including their summaries, identified errors, recommendations, and noted pitfalls.
+- Reduce redundancy by merging overlapping or repeated points. When multiple reviewers raise similar observations, combine them into a unified statement while keeping the core meaning clear.
+- Your final summary should be comprehensive, detailed, clear, and faithful to the information provided.
+
+# Output format:
+- After your analysis, you MUST use the 'output_json_summrized_reflction' tool to produce a json object of your reflection
+- Before return, double check that the only tool you called is 'output_json_summrized_reflction'
+"""
+
+COMPRESSION_USER_TEMPLATE = """
+Below are the information needed for summarization: 
+### Original question 
+{question} 
+
+### Assistant final answer 
+{prediction}
+
+### Reviewer reports 
+{reflections}
+"""
+
+COMPRESSION_TOOLS_PLAIN = [{
+    "name": "output_json_summrized_reflction",
+    "description": "Output a json object of the reflection on the task agent's trajectory.",
+    "parameters": {
+        'type': 'object',
+        'properties': {
+            'trajectory_summary': {
+                'type': 'string',
+                'description': "A summary of how the agent reached the concluding answer based on the reviewers' reports, including the webpages and documents it looked up that supports its answer. (or the reasoning efforts it has taken if no answer was found)."
+            },
+            'summarized_error_report': {
+                'type': 'string',
+                'description': "A summarized report that adheres to the system instructions."
+            },
+        },
+        'required': [],
+        'additionalProperties': False,
+    }
+}]
+
+COMPRESSION_TOOLS = [
+    {
+        "type": "function",
+        "function": tool  
+    } for tool in COMPRESSION_TOOLS_PLAIN 
+]

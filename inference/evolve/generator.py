@@ -31,6 +31,7 @@ class Generator:
         task: dict,
         playbook: Playbook = None,
         reflection: Optional[str] = None,
+        knowledge_history: List[dict]= None,
     ):
         logger.debug(f"playbook: {playbook is not None}; reflection: {reflection is not None}.")
 
@@ -39,6 +40,7 @@ class Generator:
             model_name=self.model_name,
             playbook=playbook,
             reflection=reflection,
+            knowledge_history=knowledge_history,
         )
         logger.debug(f"system prompt:\n{system_prompt}...")
 
