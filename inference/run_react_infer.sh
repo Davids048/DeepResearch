@@ -23,6 +23,7 @@ echo "Loading environment variables from .env file..."
 set -a  # automatically export all variables
 source "$ENV_FILE"
 source "$EXP_ENV_FILE"
+cat "$EXP_ENV_FILE"
 set +a  # stop automatically exporting
 
 # Validate critical variables
