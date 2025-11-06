@@ -44,7 +44,7 @@ import random
 import datetime
 
 from logger import setup_logging
-logger = setup_logging(name=__name__, level=10)
+logger = setup_logging(name=__name__, level=15)
 
 
 class MultiTurnReactAgent(FnCallAgent):
@@ -145,7 +145,7 @@ class MultiTurnReactAgent(FnCallAgent):
         base_sleep_time = 1
         for attempt in range(max_tries):
             try:
-                logger.info(f"--- Attempting to call the service, try {attempt + 1}/{max_tries} ---")
+                logger.debug(f"--- Attempting to call the service, try {attempt + 1}/{max_tries} ---")
                 chat_response = client.chat.completions.create(
                     model=self.model,
                     messages=msgs,
@@ -163,24 +163,24 @@ class MultiTurnReactAgent(FnCallAgent):
                 # content = reasoning_content + content
 
                 if content and content.strip():
-                    logger.info("--- Service call successful, received a valid response ---")
+                    logger.debug("--- Service call successful, received a valid response ---")
                     return content.strip()
                 else:
-                    logger.info(f"Warning: Attempt {attempt + 1} received an empty response.")
+                    logger.warning(f"Warning: Attempt {attempt + 1} received an empty response.")
 
             except (APIError, APIConnectionError, APITimeoutError) as e:
-                logger.info(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
+                logger.error(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
             except Exception as e:
-                logger.info(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
+                logger.error(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
 
             if attempt < max_tries - 1:
                 sleep_time = base_sleep_time * (2 ** attempt) + random.uniform(0, 1)
                 sleep_time = min(sleep_time, 30)
 
-                logger.info(f"Retrying in {sleep_time:.2f} seconds...")
+                logger.debug(f"Retrying in {sleep_time:.2f} seconds...")
                 time.sleep(sleep_time)
             else:
-                logger.info("Error: All retry attempts have been exhausted. The call has failed.")
+                logger.warning("Error: All retry attempts have been exhausted. The call has failed.")
 
         return f"vllm server error!!!"
 
@@ -203,7 +203,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 if "python" in tool_call_str.lower():
                     try:
                         code_raw = content.split('<tool_call>')[1].split('</tool_call>')[0].split('<code>')[1].split('</code>')[0].strip()
-                        logger.info(f"Round {round}: Detected Python code ({len(code_raw)} chars)")
+                        logger.debug(f"Round {round}: Detected Python code ({len(code_raw)} chars)")
                         tool_calls.append({
                             "name": "PythonInterpreter",
                             "arguments": {"code": code_raw}
@@ -219,7 +219,7 @@ class MultiTurnReactAgent(FnCallAgent):
                     tool_call = json5.loads(tool_call_str)
                     tool_name = tool_call.get('name', '')
                     tool_args = tool_call.get('arguments', {})
-                    logger.info(f"Round {round}: Calling tool '{tool_name}' with args: {tool_args}")
+                    logger.debug(f"Round {round}: Calling tool '{tool_name}' with args: {tool_args}")
                     tool_calls.append({
                         "name": tool_name,
                         "arguments": tool_args
@@ -263,11 +263,12 @@ class MultiTurnReactAgent(FnCallAgent):
             enable_thinking=True,
             add_generation_prompt=True,
         )
+        logger.debug(f"agent prompt: \n{prompt}")
         
 
         for attempt in range(max_tries):
             try:
-                # logger.info(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
+                # logger.debug(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
                 response = client.completions.create(
                     model=self.model,
                     prompt = prompt,
@@ -279,25 +280,25 @@ class MultiTurnReactAgent(FnCallAgent):
                 message = response.choices[0].text
 
                 if message:
-                    # logger.info("--- Service call successful, received a valid response ---")
-                    # logger.warning(f"appending <think> token for later parsing.")
+                    logger.debug("--- Service call successful, received a valid response ---")
+                    logger.debug(f"appending <think> token for later parsing.")
                     return '<think>' + message
                 else:
-                    logger.info(f"Warning: Attempt {attempt + 1} received an empty response.")
+                    logger.warning(f"Warning: Attempt {attempt + 1} received an empty response.")
 
             except (APIError, APIConnectionError, APITimeoutError) as e:
-                logger.info(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
+                logger.error(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
             except Exception as e:
-                logger.info(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
+                logger.error(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
 
             if attempt < max_tries - 1:
                 sleep_time = base_sleep_time * (2 ** attempt) + random.uniform(0, 1)
                 sleep_time = min(sleep_time, 30)
 
-                logger.info(f"Retrying in {sleep_time:.2f} seconds...")
+                logger.debug(f"Retrying in {sleep_time:.2f} seconds...")
                 time.sleep(sleep_time)
             else:
-                logger.info("Error: All retry attempts have been exhausted. The call has failed.")
+                logger.warning("Error: All retry attempts have been exhausted. The call has failed.")
 
         return None
 
@@ -318,7 +319,7 @@ class MultiTurnReactAgent(FnCallAgent):
         base_sleep_time = 1
         for attempt in range(max_tries):
             try:
-                logger.info(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
+                logger.debug(f"--- Attempting to call the service (OpenAI Tools), try {attempt + 1}/{max_tries} ---")
                 chat_response = client.chat.completions.create(
                     model=self.model,
                     messages=msgs,
@@ -332,24 +333,24 @@ class MultiTurnReactAgent(FnCallAgent):
                 message = chat_response.choices[0].message
 
                 if message:
-                    logger.info("--- Service call successful, received a valid response ---")
+                    logger.debug("--- Service call successful, received a valid response ---")
                     return message
                 else:
-                    logger.info(f"Warning: Attempt {attempt + 1} received an empty response.")
+                    logger.warning(f"Warning: Attempt {attempt + 1} received an empty response.")
 
             except (APIError, APIConnectionError, APITimeoutError) as e:
-                logger.info(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
+                logger.error(f"Error: Attempt {attempt + 1} failed with an API or network error: {e}")
             except Exception as e:
-                logger.info(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
+                logger.error(f"Error: Attempt {attempt + 1} failed with an unexpected error: {e}")
 
             if attempt < max_tries - 1:
                 sleep_time = base_sleep_time * (2 ** attempt) + random.uniform(0, 1)
                 sleep_time = min(sleep_time, 30)
 
-                logger.info(f"Retrying in {sleep_time:.2f} seconds...")
+                logger.debug(f"Retrying in {sleep_time:.2f} seconds...")
                 time.sleep(sleep_time)
             else:
-                logger.info("Error: All retry attempts have been exhausted. The call has failed.")
+                logger.warning("Error: All retry attempts have been exhausted. The call has failed.")
 
         return None
 
@@ -382,12 +383,12 @@ class MultiTurnReactAgent(FnCallAgent):
         # Convert vLLM tool calls to internal format
         tool_calls = []
         if vllm_tool_calls:
-            logger.info(f"Round {round}: vLLM parsed {len(vllm_tool_calls)} tool call(s)")
+            logger.debug(f"Round {round}: vLLM parsed {len(vllm_tool_calls)} tool call(s)")
             for tc in vllm_tool_calls:
                 function_name = tc.function.name
                 try:
                     function_args = json.loads(tc.function.arguments)
-                    logger.info(f"Round {round}: Tool '{function_name}' with args: {function_args}")
+                    logger.debug(f"Round {round}: Tool '{function_name}' with args: {function_args}")
                     tool_calls.append({
                         "name": function_name,
                         "arguments": function_args
@@ -453,7 +454,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 return result
             round += 1
             num_llm_calls_available -= 1
-            # logger.info(f"--- Round {round} starting (LLM calls remaining: {num_llm_calls_available}, elapsed: {elapsed_time/60:.1f}m) ---")
+            logger.debug(f"--- Round {round} starting (LLM calls remaining: {num_llm_calls_available}, elapsed: {elapsed_time/60:.1f}m) ---")
 
             # 1. Call server (protocol-specific)
             response = self.call_server(messages, planning_port)
@@ -481,7 +482,7 @@ class MultiTurnReactAgent(FnCallAgent):
                         result = tc["result"]
                         logger.error(f"Round {round}: Tool parsing error: {result}")
                     elif tc["name"] == "finish":
-                        logger.info(f"Round {round}: Answer found.")
+                        logger.debug(f"Round {round}: Answer found.")
                         answer_found = True
                         result = "answer found"
                     else:
@@ -517,7 +518,7 @@ class MultiTurnReactAgent(FnCallAgent):
             # 6. Token limit checking (protocol-agnostic)
             max_tokens = 110 * 1024
             token_count = self.count_tokens(messages)
-            # logger.info(f"round: {round}, token count: {token_count}")
+            logger.debug(f"round: {round}, token count: {token_count}")
 
             # Log token usage when approaching limit
             if token_count > max_tokens * 0.8:
@@ -536,7 +537,7 @@ class MultiTurnReactAgent(FnCallAgent):
                 if '<answer>' in final_content and '</answer>' in final_content:
                     prediction = final_content.split('<answer>')[1].split('</answer>')[0]
                     termination = 'generate an answer as token limit reached'
-                    logger.info(f"Final answer generated due to token limit: {prediction[:100]}{'...' if len(prediction) > 100 else ''}")
+                    logger.warning(f"Final answer generated due to token limit: {prediction[:100]}{'...' if len(prediction) > 100 else ''}")
                 else:
                     prediction = final_content
                     termination = 'format error: generate an answer as token limit reached'
