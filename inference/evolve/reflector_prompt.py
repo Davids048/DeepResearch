@@ -116,7 +116,7 @@ REFLECTION_TOOLS_KFLOW_PLAIN = [{
             },
             'correctness_judgement': {
                 'type': 'string',
-                'description': 'Judgement on the correctness of the prediction. Options: correct|incorrect|incomplete',
+                'description': 'Judgement on the correctness of the prediction. Options: correct|incorrect|incomplete. Definition of each option: "correct": the prediction meet all user requirements; "incorrect": the prediction does not meet user requirements; "incomplete": no prediciton is produced, possibly due to exceeding compute budgets.',
             },
         },
         'required': [],

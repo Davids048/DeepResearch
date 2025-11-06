@@ -16,7 +16,7 @@ from qwen_agent.tools import BaseTool
 from qwen_agent.utils.utils import format_as_text_message, merge_generate_cfgs
 from prompt_openai_tools import TOOLS_OPENAI, TOOLS_GLM, TOOLS_GLM_PLAIN
 from prompt import *
-from prompt_builder import build_system_prompt, get_protocol_for_model
+from prompt_builder import build_system_prompt, get_protocol_for_model, inject_prompt_section
 import time
 import asyncio
 
@@ -427,7 +427,9 @@ class MultiTurnReactAgent(FnCallAgent):
 
         # Use provided system_prompt or get protocol-specific prompt
         system_prompt = system_prompt if system_prompt is not None else self.get_system_prompt()
-        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}]
+        prompt_kwargs = {k:v for k,v in kwargs.items() if k in ['additional_instructions', 'knowledge_history']}
+        user_prompt = inject_prompt_section(question, **prompt_kwargs)
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
 
         # Log start of execution
         logger.info(f"=== Starting _run() for question: {question[:100]}{'...' if len(question) > 100 else ''}")

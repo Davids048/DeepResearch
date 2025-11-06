@@ -199,9 +199,11 @@ class Evolver:
             
             # 1. GENERATE: Task agent generates a trajectory
             # Phase 3: Pass previous reflection to guide next attempt
+            additional_instructions = """First read the reviews on previous attempts, think about how to use the information to help you with solving the question. Then solve this problem."""
             trajectory = self.generator.generate(
                 task=task,
                 knowledge_history=knowledge_history,
+                additional_instructions=additional_instructions if knowledge_history else None,
             )
             # trajectory = {
             #     "question": task.get('item', {}).get('question', 'Mock question'),

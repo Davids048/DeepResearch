@@ -142,6 +142,30 @@ def build_system_prompt(
     # Compose all sections
     return "\n".join(sections)
 
+def inject_prompt_section(base_prompt, **kwargs):
+    """Inject a base prompt with new information.
+    This can be system prompt or user prompt.
+
+    Args:
+        base_prompt: The existing prompt to inject sections into
+        **kwargs: Optional sections to inject 
+
+    Returns:
+        Modified prompt with injected sections appended
+    """
+    sections = [base_prompt]
+
+    if 'additional_instructions' in kwargs and kwargs['additional_instructions']:
+        sections.append(kwargs['additional_instructions'])
+
+    # Inject knowledge_history section if provided
+    if 'knowledge_history' in kwargs and kwargs['knowledge_history']:
+        knowledge_section = format_knowledge_section(kwargs['knowledge_history'])
+        if knowledge_section:
+            sections.append(knowledge_section)
+
+    return "\n".join(sections)
+
 
 def get_protocol_for_model(model_name: str) -> str:
     """Get the protocol identifier for a given model."""

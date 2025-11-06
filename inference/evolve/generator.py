@@ -29,24 +29,16 @@ class Generator:
     def generate(
         self,
         task: dict,
-        playbook: Playbook = None,
-        reflection: Optional[str] = None,
-        knowledge_history: List[dict]= None,
+        **kwargs,
     ):
-        logger.debug(f"playbook: {playbook is not None}; reflection: {reflection is not None}.")
-
         # Build system prompt using prompt builder
-        system_prompt = build_system_prompt(
-            model_name=self.model_name,
-            playbook=playbook,
-            reflection=reflection,
-            knowledge_history=knowledge_history,
-        )
+        system_prompt = build_system_prompt(model_name=self.model_name)
         logger.debug(f"system prompt:\n{system_prompt}...")
 
         trajectory = self.task_agent._run(
             data=task,
             model=self.model_name,
             system_prompt=system_prompt,
+            **kwargs,
         )
         return trajectory
