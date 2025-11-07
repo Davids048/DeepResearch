@@ -258,6 +258,7 @@ class Evolver:
                 response = "<think>" + response
                 logger.debug(f">>>>>>>>>> reflector response:{response}.")
 
+                parsed_response = None
                 try:
                    # GLM is using pure text handling.
                    parsed_response = parse_model_response(response, REFLECTION_TOOLS_KFLOW_PLAIN)
@@ -266,7 +267,7 @@ class Evolver:
                    data = tool_calls[0]["arguments"]
                    data["reasoning_content"] = reasoning_content
                 except Exception as e:
-                    logger.error(f"Unexpected error parsing reflector response, using fallback output. Error: {e}")
+                    logger.error(f"Unexpected error parsing reflector response, using fallback output. Error: {e}. Raw response:{parsed_response}")
                     # Create a fallback data object for unexpected errors
                     data = {
                         "error": "Reflector encountered unexpected error",
