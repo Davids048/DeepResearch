@@ -170,3 +170,11 @@ def inject_prompt_section(base_prompt, **kwargs):
 def get_protocol_for_model(model_name: str) -> str:
     """Get the protocol identifier for a given model."""
     return detect_protocol(model_name)
+
+def tools_plain2openai(tools:List[dict]):
+    return [
+        {
+            "type": "function",
+            "function": tool,
+        } for tool in tools
+    ]
