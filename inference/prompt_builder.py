@@ -1,9 +1,7 @@
 """
 Composable System Prompt Builder
 
-This module provides utilities to build system prompts by composing modular sections:
-- Task description (context)
-- Tools and usage instructions (model-specific)
+This module provides utilities to build system prompts by composing modular sections: - Task description (context) Tools and usage instructions (model-specific)
 - Playbook section (optional, for evolver)
 - Reflection section (optional, for evolver)
 """
@@ -87,10 +85,21 @@ def format_knowledge_section(knowledge_history:List[dict])->str:
     
     section = "\n\n# Previous review list:"
     for i, k in enumerate(knowledge_history):
-        trajectory_summary = k.get("trajectory_summary", "")
-        error_summary = k.get("summarized_error_report", "")
-        section += f"\n## review {i}:\n- Assistant Trajectory Summary: {trajectory_summary}\n- Error Report: {error_summary}.\n"
-
+        if isinstance(k, dict):
+            trajectory_summary = k.get("trajectory_summary", "")
+            error_summary = k.get("summarized_error_report", "")
+            eval_summary = k.get("summarized_rubric_based_evaluation", "") 
+            section += (
+                f"\n## review {i}:\n"
+                f"- Assistant Trajectory Summary: {trajectory_summary}\n"
+                f"- Error Report: {error_summary}.\n"
+                f"- Evaluation summary: {eval_summary}"
+            )
+        elif isinstance(k, str):
+            section += (
+                f"\n## review {i}:\n"
+                f"{k}\n"
+            )
     return section
 
 

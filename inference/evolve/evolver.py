@@ -8,8 +8,10 @@ from evolve.reflector import Reflector, ReflectorOutput
 from evolve.curator import Curator
 from evolve.playbook import Playbook
 from evolve.llm import DEFAULT_COMPLETION_CONFIG
-from evolve.reflector_prompt import COMPRESSION_SYSTEM_PROMPT, COMPRESSION_TOOLS, COMPRESSION_TOOLS_PLAIN, COMPRESSION_USER_TEMPLATE, REFLECTION_KFLOW_TOOLS, REFLECTION_TOOLS_KFLOW_PLAIN, REFLECTOR_SYSTEM_PROMPT
+from evolve.reflector_prompt import COMPRESSION_SYSTEM_PROMPT, COMPRESSION_TOOLS_PLAIN, COMPRESSION_USER_TEMPLATE, REFLECTION_TOOLS_KFLOW_PLAIN, REFLECTOR_SYSTEM_PROMPT, REFLECTOR_TEMPLATE_KFLOW
 from evolve.utils import get_glm_openai_client, get_glm_tokenizer
+from evolve.test_reflection_diversity import generate_reflections
+from prompt_builder import tools_plain2openai
 from parse_tools_utils import parse_model_response
 from logger import setup_logging
 
@@ -199,45 +201,92 @@ class Evolver:
             
             # 1. GENERATE: Task agent generates a trajectory
             # Phase 3: Pass previous reflection to guide next attempt
-            additional_instructions = """First read the reviews on previous attempts, think about how to use the information to help you with solving the question. Then solve this problem."""
+            additional_instructions = """\n\nFirst read the reviews on previous attempts, think about how to use the information to help you with solving the question. Then solve this problem."""
             trajectory = self.generator.generate(
                 task=task,
                 knowledge_history=knowledge_history,
                 additional_instructions=additional_instructions if knowledge_history else None,
             )
-            # trajectory = {
-            #     "question": task.get('item', {}).get('question', 'Mock question'),
-            #     "answer": task.get('item', {}).get('answer', 'Mock answer'),
-            #     "messages": [
-            #         {"role": "system", "content": "You are a helpful assistant."},
-            #         {"role": "user", "content": task.get('item', {}).get('question', 'Mock question')},
-            #         {"role": "assistant", "reasoning_content": "Let me think about this question.", "tool_calls": []},
-            #         {"role": "assistant", "reasoning_content": "Based on my analysis, the answer is: Mock answer", "tool_calls": [{"name": "finish", "arguments": {}}]},
-            #     ],
-            #     "prediction": "Mock answer",
-            #     "termination": "answer",
-            #     "rounds": 2,
-            # }
 
 
             logger.debug(f"Task agent finished iteration {iteration}")
-
             # 2. REFLECT: Evaluate the attempt
             # Create reflector propmt
             messages = trajectory["messages"]
             prediction = trajectory["prediction"] 
-            from evolve.reflector_prompt import REFLECTOR_TEMPLATE_KFLOW
-            reflector_user_prompt = REFLECTOR_TEMPLATE_KFLOW.format(
+
+            reflector_system_prompt = """
+You are an expert evaluator specializing in analyzing and reflecting on the performance of AI assistants in multi-step reasoning and search tasks.
+
+Your goal is to identify errors, inefficiencies, and opportunities for improvement in the assistant's reasoning and decision-making process.
+
+## Hard Rules
+- Do **not** attempt to solve the problem yourself or infer the correct answer.  
+- Base your reflection solely on the assistant's reasoning and action trajectory.  
+- Do **not** use external tools or perform additional searches during analysis.  
+- Your evaluation must remain grounded in the assistant’s own process and content.  
+
+## Output Requirement
+After completing your analysis, you **must** use the `output_json_reflection` tool to produce a JSON object summarizing your reflection.  
+Before returning, verify that the **only** tool you invoked is `output_json_reflection`.
+"""
+
+            reflector_user_template = """
+You will be given the following materials:
+- **trace**: the user query and the assistant’s reasoning/action history.  
+- **prediction**: the assistant’s final output.  
+
+## Instructions
+1. Carefully read through the assistant’s full trajectory.  
+2. Define **{num_rubrics} distinct rubrics** for evaluating the trajectory (e.g., reasoning accuracy, completeness, efficiency, self-consistency, tool use, etc.).  
+3. For each rubric, assess the assistant’s performance.  
+   - Identify any flaws, inefficiencies, or reasoning gaps.  
+   - Highlight critical mistakes and propose potential improvements.
+
+## Data
+### Assistant's Message Trajectory
+===============================================================================
+{messages}
+===============================================================================
+**End of Trajectory**
+
+### Final Assistant Prediction
+{prediction}
+"""
+
+            reflector_tools_plain = [{
+                "name": "output_json_reflection",
+                "description": "Produce a JSON summary reflecting on the assistant’s performance across defined rubrics.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "review": {
+                            "type": "array",
+                            "description": "A list of rubric-based reflections assessing the assistant’s performance.",
+                            "items": {
+                                "type": "string",
+                                "description": "One reflection entry formatted as '**Rubric Name**: Evaluation and suggestions for improvement.'"
+                            }
+                        }
+                    },
+                    "required": ["review"],
+                    "additionalProperties": False
+                }
+            }]
+
+            num_reflections = int(os.getenv("MAX_REFLECTIONS", 16))           
+            reflector_user_prompt = reflector_user_template.format(
                 messages = messages,
                 prediction = prediction,
+                num_rubrics = num_reflections,
             )
             tokenizer = get_glm_tokenizer()
             prompt = tokenizer.apply_chat_template(
                [
-                    {"role": "system", "content": REFLECTOR_SYSTEM_PROMPT},
+                    {"role": "system", "content": reflector_system_prompt},
                     {"role": "user", "content": reflector_user_prompt},
                 ],
-                tools = REFLECTION_KFLOW_TOOLS,
+                tools = tools_plain2openai(reflector_tools_plain),
                 tokenize=False,
                 enable_thinking=True,
                 add_generation_prompt=True,
@@ -248,8 +297,8 @@ class Evolver:
                     model="zai-org/GLM-4.6",
                     prompt = prompt,
                     # Use following params for more variety.
-                    temperature=1.2,
-                    top_p = 0.85,
+                    temperature=1.0,
+                    top_p = 0.95,
                     seed = random.randint(1,1000),
                     max_tokens=16000,
                     # **DEFAULT_COMPLETION_CONFIG,
@@ -261,7 +310,7 @@ class Evolver:
                 parsed_response = None
                 try:
                    # GLM is using pure text handling.
-                   parsed_response = parse_model_response(response, REFLECTION_TOOLS_KFLOW_PLAIN)
+                   parsed_response = parse_model_response(response, reflector_tools_plain)
                    reasoning_content = parsed_response.get("reasoning_content", "")
                    tool_calls = parsed_response.get("tool_calls", [])
                    data = tool_calls[0]["arguments"]
@@ -274,7 +323,7 @@ class Evolver:
                     }
                 return data 
             reflections = []
-            num_reflections = int(os.getenv("MAX_REFLECTIONS", 16))           
+            num_reflections = 1  ### Since we are genearting num_reflections rubrics in one generation, here we set num_reflections to 1. 
             num_reflection_workers = int(os.getenv("MAX_REFLECTION_WORKERS", 16))           
             with ThreadPoolExecutor(max_workers = num_reflection_workers) as executor:
                 futures = [executor.submit(_generate_single_reflection) for _ in range(num_reflections)]
@@ -284,63 +333,79 @@ class Evolver:
                     except Exception as e:
                         logger.error(f"Reflection future failed: {e}.")
                         reflections.append({"error": "Reflection failed"})
+
+            
+            review_items = reflections[0].get("review", []) if reflections else []
+            # join into a single readable evaluation text
+            summarized_reflection = "\n\n".join(review_items)
+            knowledge_history.append(summarized_reflection)
             # Aggregate the results - pickout the ones where reflector judge the trace as wrong. 
-            error_reflections = []
-            for reflection in reflections:
-                verdict = reflection.get("correctness_judgement", "")
-                if verdict and verdict != "correct": # treating incorrect and incomplete as wrong.
-                    error_reflections.append(reflection)
+            # error_reflections = []
+            # for reflection in reflections:
+            #     verdict = reflection.get("correctness_judgement", "")
+            #     if verdict and verdict != "correct": # treating incorrect and incomplete as wrong.
+            #         error_reflections.append(reflection)
 
-            summarized_reflection = "N/A"
-            if error_reflections:
-                # Compress into one report to add to knowledge list tracker.
-                question = trajectory["question"]
-                prediction = trajectory["prediction"]
-                reflections_text = ""
-                for i, reflection in enumerate(error_reflections):
-                    reflections_text += f"# Review {i}:\n## Assistant Trajectory Summary: {reflection.get('trajectory_summary', '')}\n## Error Report: {reflection.get('error_report','')}\n\n"
-                # format compression prompt 
-                compression_prompt = COMPRESSION_USER_TEMPLATE.format(
-                    question = question,
-                    prediction = prediction,
-                    reflections = reflections_text,
-                )
-                tokenizer = get_glm_tokenizer()
-                prompt = tokenizer.apply_chat_template(
-                    [
-                        {"role": "system", "content": COMPRESSION_SYSTEM_PROMPT},
-                        {"role": "user", "content": compression_prompt},
-                    ],
-                    tools = COMPRESSION_TOOLS,
-                    tokenize=False,
-                    enable_thinking=True,
-                    add_generation_prompt=True,
-                )
-                logger.debug(f"compression prompt: {prompt}")
-                client = get_glm_openai_client()
-                response = client.completions.create(
-                    model="zai-org/GLM-4.6",
-                    prompt = prompt,
-                    **DEFAULT_COMPLETION_CONFIG,
-                )
-                response = response.choices[0].text
-                response = "<think>" + response
-                logger.debug(f"compressed report: {response}")
+            # # Compress Reflections into 1 report. 
+            # compression_system_prompt = COMPRESSION_SYSTEM_PROMPT
+            # compression_user_template = COMPRESSION_USER_TEMPLATE
+            # compression_tools_plain = COMPRESSION_TOOLS_PLAIN
 
-                try:
-                   # GLM is using pure text handling.
-                   parsed_response = parse_model_response(response, COMPRESSION_TOOLS_PLAIN)
-                   reasoning_content = parsed_response.get("reasoning_content", "")
-                   tool_calls = parsed_response.get("tool_calls", [])
-                   data = tool_calls[0]["arguments"]
-                   data["reasoning_content"] = reasoning_content
-                   summarized_reflection = data
-                except Exception as e:
-                    logger.error(f"Unexpected error parsing reflector response, using fallback output. Error: {e}")
-                    data = {
-                        "error": "Reflector encountered unexpected error",
-                    }
-                knowledge_history.append(summarized_reflection)
+            # summarized_reflection = "N/A"
+            # if error_reflections:
+            #     question = trajectory["question"]
+            #     prediction = trajectory["prediction"]
+            #     reflections_text = ""
+            #     for i, reflection in enumerate(error_reflections):
+            #         reflections_text += (
+            #             f"# Review {i}:\n"
+            #             f"## Assistant Trajectory Summary: {reflection.get('trajectory_summary', '')}\n\n"
+            #             f"## Error Report: {reflection.get('error_report', '')}\n\n"
+            #             f"## Rubric Based Evaluation: {reflection.get('rubric_based_evaluation', '')}\n\n"
+            #         )
+
+            #     # format compression prompt 
+            #     compression_prompt = compression_user_template.format(
+            #         question = question,
+            #         prediction = prediction,
+            #         reflections = reflections_text,
+            #     )
+            #     tokenizer = get_glm_tokenizer()
+            #     prompt = tokenizer.apply_chat_template(
+            #         [
+            #             {"role": "system", "content": compression_system_prompt},
+            #             {"role": "user", "content": compression_prompt},
+            #         ],
+            #         tools = tools_plain2openai(compression_tools_plain),
+            #         tokenize=False,
+            #         enable_thinking=True,
+            #         add_generation_prompt=True,
+            #     )
+            #     logger.debug(f"compression prompt: {prompt}")
+            #     client = get_glm_openai_client()
+            #     response = client.completions.create(
+            #         model="zai-org/GLM-4.6",
+            #         prompt = prompt,
+            #         **DEFAULT_COMPLETION_CONFIG,
+            #     )
+            #     response = response.choices[0].text
+            #     response = "<think>" + response
+            #     logger.debug(f"compressed report: {response}")
+
+            #     try:
+            #        # GLM is using pure text handling.
+            #        parsed_response = parse_model_response(response, COMPRESSION_TOOLS_PLAIN)
+            #        reasoning_content = parsed_response.get("reasoning_content", "")
+            #        tool_calls = parsed_response.get("tool_calls", [])
+            #        data = tool_calls[0]["arguments"]
+            #        data["reasoning_content"] = reasoning_content
+            #        summarized_reflection = data
+            #     except Exception as e:
+            #         logger.error(f"Unexpected error parsing reflector response, using fallback output. Error: {e}")
+            #         data = {
+            #             "error": "Reflector encountered unexpected error",
+            #         }
+            #     knowledge_history.append(summarized_reflection)
 
 
             iteration_result = {

@@ -18,7 +18,7 @@ def get_argument_type(func_name: str, arg_key: str, defined_tools: list):
         return None
     return tool["parameters"]["properties"][arg_key]["type"]
 
-def parse_model_response(response: str, defined_tools: list):
+def parse_model_response_reasoning_first(response: str, defined_tools: list):
     text = response.strip()
     reasoning_content = None
     content = None
@@ -73,4 +73,62 @@ def parse_model_response(response: str, defined_tools: list):
     if tool_calls:
         message['tool_calls'] = tool_calls
     
+    return message
+
+def parse_model_response(response: str, defined_tools: list):
+    """
+    Alternative parsing that treats everything before the first <tool_call> as reasoning content.
+    """
+    text = response.strip()
+    reasoning_content = None
+    tool_calls = []
+
+    # First, find all tool call blocks
+    tool_call_strs = re.findall(r'<tool_call>(.*?)</tool_call>', text, re.DOTALL)
+
+    # Find the first <tool_call> tag
+    if '<tool_call>' in text:
+        index = text.find('<tool_call>')
+        # Everything before the first <tool_call> is reasoning content
+        reasoning_content = text[:index].strip()
+        # Remove <think> tags if present
+        if reasoning_content.startswith('<think>'):
+            reasoning_content = reasoning_content.removeprefix('<think>').strip()
+        if reasoning_content.endswith('</think>'):
+            reasoning_content = reasoning_content.removesuffix('</think>').strip()
+    else:
+        # No tool calls found, everything is reasoning content
+        reasoning_content = text.strip()
+        if reasoning_content.startswith('<think>'):
+            reasoning_content = reasoning_content.removeprefix('<think>').strip()
+        if reasoning_content.endswith('</think>'):
+            reasoning_content = reasoning_content.removesuffix('</think>').strip()
+
+    # Parse tool calls
+    for call in tool_call_strs:
+        func_name_match = re.match(r'([^\n<]+)', call.strip())
+        func_name = func_name_match.group(1).strip() if func_name_match else None
+        if func_name:
+            pairs = re.findall(r'<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>', call, re.DOTALL)
+            arguments = {}
+            for arg_key, arg_value in pairs:
+                arg_key = arg_key.strip()
+                arg_value = arg_value.strip()
+                arg_type = get_argument_type(func_name, arg_key, defined_tools)
+                if arg_type != 'string':
+                    arg_value, is_good_json = parse_arguments(arg_value)
+                arguments[arg_key] = arg_value
+
+            tool_calls.append({
+                'tool_call_id': "tool-call-" + str(uuid.uuid4()),
+                'name': func_name,
+                'arguments': arguments
+            })
+
+    message = {'role': 'assistant'}
+    if reasoning_content:
+        message['reasoning_content'] = reasoning_content
+    if tool_calls:
+        message['tool_calls'] = tool_calls
+
     return message
