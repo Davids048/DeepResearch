@@ -83,7 +83,7 @@ def main():
         description='Extract trajectories from evolved_kflow.jsonl files'
     )
     parser.add_argument(
-        '--input_file',
+        '--input-file',
         type=str,
         help='Path to the input JSONL file (e.g., iter1.evolved_kflow.jsonl)'
     )

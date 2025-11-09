@@ -51,7 +51,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    wandb_run = wandb.init()
+    wandb_run = wandb.init(config=args)
     print(f"WANDB_RUN_ID={wandb_run.id}", flush=True)
 
     print(args)
@@ -73,6 +73,7 @@ if __name__ == "__main__":
 
     os.makedirs(dataset_dir, exist_ok=True)
     print(f"OUTPUT_DIR={dataset_dir}")
+    wandb.config.update({"output_dir": dataset_dir})
 
     print(f"Model name: {model_name}")
     print(f"Data set path: {args.dataset}")
