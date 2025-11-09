@@ -256,13 +256,13 @@ You will be given the following materials:
 
             reflector_tools_plain = [{
                 "name": "output_json_reflection",
-                "description": "Produce a JSON summary reflecting on the assistant’s performance across defined rubrics.",
+                "description": "Produce a JSON summary reflecting on the assistant’s performance across defined rubrics that strictly follows this schema.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "review": {
                             "type": "array",
-                            "description": "A list of rubric-based reflections assessing the assistant’s performance.",
+                            "description": "A list of strings. Each string is a rubric-based reflections assessing the assistant’s performance.",
                             "items": {
                                 "type": "string",
                                 "description": "One reflection entry formatted as '**Rubric Name**: Evaluation and suggestions for improvement.'"
@@ -337,7 +337,13 @@ You will be given the following materials:
             
             review_items = reflections[0].get("review", []) if reflections else []
             # join into a single readable evaluation text
-            summarized_reflection = "\n\n".join(review_items)
+            if isinstance(review_items, list):
+                summarized_reflection = "\n\n".join(review_items)
+            elif isinstance(review_items, str):
+                summarized_reflection = review_items 
+                logger.warning(f"review items is string. Using fault tolerant formatting...")
+            else:
+                logger.error(f"Unexpected review items type: {type(review_items)}")
             knowledge_history.append(summarized_reflection)
             # Aggregate the results - pickout the ones where reflector judge the trace as wrong. 
             # error_reflections = []

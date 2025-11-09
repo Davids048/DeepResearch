@@ -133,6 +133,12 @@ cd "$( dirname -- "${BASH_SOURCE[0]}" )"
 # Create timestamped debug log filename
 DEBUG_LOG="debug_$(date +%Y%m%d-%H%M%S).log"
 
+# Write .env.exp content to debug log
+echo "=== .env.exp Configuration ===" >> $DEBUG_LOG
+cat "$EXP_ENV_FILE" >> $DEBUG_LOG
+echo "=============================" >> $DEBUG_LOG
+echo "" >> $DEBUG_LOG
+
 python -u run_multi_react.py \
     --dataset "$DATASET" \
     --output "$OUTPUT_PATH" \
@@ -146,7 +152,7 @@ python -u run_multi_react.py \
     --port $VLLM_PORT \
     --mode "${RUN_MODE:-baseline}" \
     --debug-size ${DEBUG_SIZE:-0} \
-    2>&1 | tee $DEBUG_LOG
+    2>&1 | tee -a $DEBUG_LOG
 
 #######################################
 ##4. Attach debug log to wandb run  ###
@@ -179,12 +185,6 @@ if [ -n "$OUTPUT_DIR" ] && [ -d "$OUTPUT_DIR" ]; then
     if [ -f "$DEBUG_LOG" ]; then
         mv "$DEBUG_LOG" "$OUTPUT_DIR/"
         echo "Moved $DEBUG_LOG to $OUTPUT_DIR/"
-    fi
-
-    # Move env.exp file
-    if [ -f "$EXP_ENV_FILE" ]; then
-        cp "$EXP_ENV_FILE" "$OUTPUT_DIR/.env.exp"
-        echo "Copied .env.exp to $OUTPUT_DIR/"
     fi
 else
     echo "Warning: Could not determine output directory or directory does not exist. Debug log remains in
