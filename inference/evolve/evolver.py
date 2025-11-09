@@ -242,6 +242,7 @@ You will be given the following materials:
 3. For each rubric, assess the assistant’s performance.  
    - Identify any flaws, inefficiencies, or reasoning gaps.  
    - Highlight critical mistakes and propose potential improvements.
+4. Output exactly {num_rubrics} rubric-based reviews.
 
 ## Data
 ### Assistant's Message Trajectory
@@ -293,34 +294,60 @@ You will be given the following materials:
             )
             client = get_glm_openai_client()
             def _generate_single_reflection():
-                response = client.completions.create(
-                    model="zai-org/GLM-4.6",
-                    prompt = prompt,
-                    # Use following params for more variety.
-                    temperature=1.0,
-                    top_p = 0.95,
-                    seed = random.randint(1,1000),
-                    max_tokens=16000,
-                    # **DEFAULT_COMPLETION_CONFIG,
-                )
-                response = response.choices[0].text
-                response = "<think>" + response
-                logger.debug(f">>>>>>>>>> reflector response:{response}.")
+                data = None
+                for i in range(5): # perform 5 trials, ensure the output format
+                    response = client.completions.create(
+                        model="zai-org/GLM-4.6",
+                        prompt = prompt,
+                        # Use following params for more variety.
+                        temperature=1.0,
+                        top_p = 0.95,
+                        seed = random.randint(1,1000),
+                        max_tokens=16000,
+                        # **DEFAULT_COMPLETION_CONFIG,
+                    )
+                    response = response.choices[0].text
+                    response = "<think>" + response
+                    logger.debug(f">>>>>>>>>> reflector response:{response}.")
 
-                parsed_response = None
-                try:
-                   # GLM is using pure text handling.
-                   parsed_response = parse_model_response(response, reflector_tools_plain)
-                   reasoning_content = parsed_response.get("reasoning_content", "")
-                   tool_calls = parsed_response.get("tool_calls", [])
-                   data = tool_calls[0]["arguments"]
-                   data["reasoning_content"] = reasoning_content
-                except Exception as e:
-                    logger.error(f"Unexpected error parsing reflector response, using fallback output. Error: {e}. Raw response:{parsed_response}")
-                    # Create a fallback data object for unexpected errors
+                    parsed_response = None
+                    try:
+                        # GLM is using pure text handling.
+                        parsed_response = parse_model_response(response, reflector_tools_plain)
+                        reasoning_content = parsed_response.get("reasoning_content", "")
+                        tool_calls = parsed_response.get("tool_calls", [])
+                        data = tool_calls[0]["arguments"]
+                        data["reasoning_content"] = reasoning_content
+                    except Exception as e:
+                        logger.error(f"Unexpected error parsing reflector response, using fallback output. Error: {e}. Raw response:{parsed_response}")
+                        # Continue to next trial
+                        continue
+
+                    # Ensure the data is in the right format (review must be a list, not a string)
+                    if "review" in data:
+                        review = data["review"]
+                        # If review is not a list, regenerate
+                        if not isinstance(review, list):
+                            logger.warning(f"Review has wrong type: {type(review)}, regenerating (trial {i+1}/5)")
+                            data = None
+                            continue
+                        # Valid format - break out of retry loop
+                        logger.debug(f"Valid review format found on trial {i+1}")
+                        break
+                    else:
+                        # If review field is missing, regenerate
+                        logger.warning(f"Review field missing from reflector response, regenerating (trial {i+1}/5)")
+                        data = None
+                        continue
+
+                # If all trials failed, return fallback with empty review list
+                if data is None:
+                    logger.error(f"All trials failed to generate valid review format, using fallback")
                     data = {
-                        "error": "Reflector encountered unexpected error",
+                        "error": "All trials failed to generate valid review",
+                        "review": []
                     }
+
                 return data 
             reflections = []
             num_reflections = 1  ### Since we are genearting num_reflections rubrics in one generation, here we set num_reflections to 1. 
@@ -336,12 +363,18 @@ You will be given the following materials:
 
             
             review_items = reflections[0].get("review", []) if reflections else []
+            review_items = ["test","test","test","test"]
+            # Ensure there are only num_reflections rubrics in the generated reviews list
+            if isinstance(review_items, list) and len(review_items) > num_reflections:
+                logger.warning(f"Generated {len(review_items)} rubrics, but expected {num_reflections}. Randomly selecting {num_reflections} rubrics.")
+                review_items = random.sample(review_items, num_reflections)
+
             # join into a single readable evaluation text
             if isinstance(review_items, list):
                 summarized_reflection = "\n\n".join(review_items)
             elif isinstance(review_items, str):
                 summarized_reflection = review_items 
-                logger.warning(f"review items is string. Using fault tolerant formatting...")
+                logger.error(f"review items is string. Using fault tolerant formatting...")
             else:
                 logger.error(f"Unexpected review items type: {type(review_items)}")
             knowledge_history.append(summarized_reflection)
