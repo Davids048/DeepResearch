@@ -10,7 +10,6 @@ from evolve.playbook import Playbook
 from evolve.llm import DEFAULT_COMPLETION_CONFIG
 from evolve.reflector_prompt import COMPRESSION_SYSTEM_PROMPT, COMPRESSION_TOOLS_PLAIN, COMPRESSION_USER_TEMPLATE, REFLECTION_TOOLS_KFLOW_PLAIN, REFLECTOR_SYSTEM_PROMPT, REFLECTOR_TEMPLATE_KFLOW
 from evolve.utils import get_glm_openai_client, get_glm_tokenizer
-from evolve.test_reflection_diversity import generate_reflections
 from prompt_builder import tools_plain2openai
 from parse_tools_utils import parse_model_response
 from logger import setup_logging

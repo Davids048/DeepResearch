@@ -18,6 +18,7 @@ import traceback
 
 import math
 import wandb
+import random
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -42,6 +43,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debug-size",
         type=int,
+    )
+    parser.add_argument(
+        "--debug-seed",
+        type=int,
+        default=42,
+        help="Random seed for shuffling debug samples (default: 42)",
     )
     parser.add_argument(
         "--max-iterations",
@@ -119,8 +126,11 @@ if __name__ == "__main__":
     print(f"Processing items {start_idx} to {end_idx-1} ({len(items)} items)")
 
     if args.debug_size > 0:
-        print(f">>>> DEBUG: using the first {args.debug_size} samples.")
-        items = items[:args.debug_size]
+        # Shuffle items with a fixed seed for reproducibility
+        random.seed(args.debug_seed)
+        random.shuffle(items)
+        print(f">>>> DEBUG: using the first {args.debug_size} samples (shuffled with seed={args.debug_seed}).")
+        items = items[:args.debug_size] 
 
 
     if total_splits > 1:
