@@ -248,7 +248,8 @@ def single_round_statistics(input_file):
         
         for msg in messages:
             if msg['role'] == 'assistant':
-                reasoning_content = msg['reasoning_content']
+                # reasoning_content = msg['reasoning_content']
+                reasoning_content = msg.get('reasoning_content', "")
                 tool_calls = msg.get('tool_calls', [])
 
                 num_tool_use += len(tool_calls)

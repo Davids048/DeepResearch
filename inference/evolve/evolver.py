@@ -363,7 +363,6 @@ You will be given the following materials:
 
             
             review_items = reflections[0].get("review", []) if reflections else []
-            review_items = ["test","test","test","test"]
             # Ensure there are only num_reflections rubrics in the generated reviews list
             if isinstance(review_items, list) and len(review_items) > num_reflections:
                 logger.warning(f"Generated {len(review_items)} rubrics, but expected {num_reflections}. Randomly selecting {num_reflections} rubrics.")

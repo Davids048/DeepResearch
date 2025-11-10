@@ -17,6 +17,9 @@ cd "$(dirname "$0")"
 # INPUT=../inference/output/GLM-4.6/browsecomp/20251108-041538
 # INPUT=../inference/output/GLM-4.6/browsecomp/20251108-045053
 # INPUT=../inference/output/GLM-4.6/browsecomp/20251108-054456
+# INPUT=../inference/output/GLM-4.6/browsecomp/20251109-060600
+# INPUT=../inference/output/GLM-4.6/browsecomp/20251109-201924
+INPUT=../inference/output/GLM-4.6/browsecomp/20251109-235759
 
 python evaluate_deepsearch_official_glm.py \
     --input_folder $INPUT \
