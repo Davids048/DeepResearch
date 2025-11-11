@@ -8,10 +8,9 @@ from evolve.reflector import Reflector, ReflectorOutput
 from evolve.curator import Curator
 from evolve.playbook import Playbook
 from evolve.llm import DEFAULT_COMPLETION_CONFIG
-from evolve.reflector_prompt import COMPRESSION_SYSTEM_PROMPT, COMPRESSION_TOOLS_PLAIN, COMPRESSION_USER_TEMPLATE, REFLECTION_TOOLS_KFLOW_PLAIN, REFLECTOR_SYSTEM_PROMPT, REFLECTOR_TEMPLATE_KFLOW
 from evolve.utils import get_glm_openai_client, get_glm_tokenizer
 from prompt_builder import tools_plain2openai
-from parse_tools_utils import parse_model_response
+from parse_tools_utils import parse_model_response, parse_model_response_json
 from logger import setup_logging
 
 logger = setup_logging(name=__name__, level=20)
@@ -200,19 +199,24 @@ class Evolver:
             
             # 1. GENERATE: Task agent generates a trajectory
             # Phase 3: Pass previous reflection to guide next attempt
-            additional_instructions = """\n\nFirst read the reviews on previous attempts, think about how to use the information to help you with solving the question. Then solve this problem."""
+            additional_instructions = """\n\nRead the reviews based on previous attempts first, then solve the problem leveraging each relevant proposed adjustments."""
             trajectory = self.generator.generate(
                 task=task,
                 knowledge_history=knowledge_history,
                 additional_instructions=additional_instructions if knowledge_history else None,
             )
 
-
             logger.debug(f"Task agent finished iteration {iteration}")
             # 2. REFLECT: Evaluate the attempt
             # Create reflector propmt
             messages = trajectory["messages"]
             prediction = trajectory["prediction"] 
+            
+            # If messages have more than 120 rounds, drop the rounds with role = tool
+            if len(messages) > 120:
+                logger.warning(f"Messages have {len(messages)} rounds, filtering out tool messages to reduce size")
+                messages = [msg for msg in messages if msg.get("role") != "tool"]
+                logger.info(f"After filtering, messages have {len(messages)} rounds") 
 
             reflector_system_prompt = """
 You are an expert evaluator specializing in analyzing and reflecting on the performance of AI assistants in multi-step reasoning and search tasks.
@@ -220,14 +224,9 @@ You are an expert evaluator specializing in analyzing and reflecting on the perf
 Your goal is to identify errors, inefficiencies, and opportunities for improvement in the assistant's reasoning and decision-making process.
 
 ## Hard Rules
-- Do **not** attempt to solve the problem yourself or infer the correct answer.  
 - Base your reflection solely on the assistant's reasoning and action trajectory.  
 - Do **not** use external tools or perform additional searches during analysis.  
 - Your evaluation must remain grounded in the assistant’s own process and content.  
-
-## Output Requirement
-After completing your analysis, you **must** use the `output_json_reflection` tool to produce a JSON object summarizing your reflection.  
-Before returning, verify that the **only** tool you invoked is `output_json_reflection`.
 """
 
             reflector_user_template = """
@@ -235,13 +234,17 @@ You will be given the following materials:
 - **trace**: the user query and the assistant’s reasoning/action history.  
 - **prediction**: the assistant’s final output.  
 
-## Instructions
-1. Carefully read through the assistant’s full trajectory.  
-2. Define **{num_rubrics} distinct rubrics** for evaluating the trajectory (e.g., reasoning accuracy, completeness, efficiency, self-consistency, tool use, etc.).  
-3. For each rubric, assess the assistant’s performance.  
-   - Identify any flaws, inefficiencies, or reasoning gaps.  
-   - Highlight critical mistakes and propose potential improvements.
-4. Output exactly {num_rubrics} rubric-based reviews.
+## Perform the following steps:
+1. First think carefully how you would have approached the question, including assumptions, search strategies, pivots. 
+2. Carefully read through the assistant’s full trajectory.  Compare what is different from what you assumed. 
+3. Assess whether the trajectory sucessfully complete the task. 
+5. Based on your comparison, write some proposed_adjustments. Write like an inner monologue planning a pivot for the next attempt. Start with "Let me think outside the box, what if..."
+
+## Output Requirement
+Output a json object wrapped in ``` blocks including the following fields: 
+- correctness_judgement: Judgement on the correctness of the prediction. Options: correct|incorrect. Definition: 'correct': the prediction meets all user requirements; 'incorrect': the prediction does not meet user requirements or failed to find a plausible prediction."
+- proposed_adjustments: Your proposed pivot. 
+- trajectory_summary: A summary of the trajectory, including key assumptions, strategies, and explored search space.
 
 ## Data
 ### Assistant's Message Trajectory
@@ -253,26 +256,6 @@ You will be given the following materials:
 ### Final Assistant Prediction
 {prediction}
 """
-
-            reflector_tools_plain = [{
-                "name": "output_json_reflection",
-                "description": "Produce a JSON summary reflecting on the assistant’s performance across defined rubrics that strictly follows this schema.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "review": {
-                            "type": "array",
-                            "description": "A list of strings. Each string is a rubric-based reflections assessing the assistant’s performance.",
-                            "items": {
-                                "type": "string",
-                                "description": "One reflection entry formatted as '**Rubric Name**: Evaluation and suggestions for improvement.'"
-                            }
-                        }
-                    },
-                    "required": ["review"],
-                    "additionalProperties": False
-                }
-            }]
 
             num_reflections = int(os.getenv("MAX_REFLECTIONS", 16))           
             reflector_user_prompt = reflector_user_template.format(
@@ -286,7 +269,7 @@ You will be given the following materials:
                     {"role": "system", "content": reflector_system_prompt},
                     {"role": "user", "content": reflector_user_prompt},
                 ],
-                tools = tools_plain2openai(reflector_tools_plain),
+                # tools = tools_plain2openai(reflector_tools_plain),
                 tokenize=False,
                 enable_thinking=True,
                 add_generation_prompt=True,
@@ -312,7 +295,9 @@ You will be given the following materials:
                     parsed_response = None
                     try:
                         # GLM is using pure text handling.
-                        parsed_response = parse_model_response(response, reflector_tools_plain)
+                        # parsed_response = parse_model_response(response, reflector_tools_plain)
+                        # Use Parse Json.
+                        parsed_response = parse_model_response_json(response)
                         reasoning_content = parsed_response.get("reasoning_content", "")
                         tool_calls = parsed_response.get("tool_calls", [])
                         data = tool_calls[0]["arguments"]
@@ -322,34 +307,52 @@ You will be given the following materials:
                         # Continue to next trial
                         continue
 
-                    # Ensure the data is in the right format (review must be a list, not a string)
-                    if "review" in data:
-                        review = data["review"]
-                        # If review is not a list, regenerate
-                        if not isinstance(review, list):
-                            logger.warning(f"Review has wrong type: {type(review)}, regenerating (trial {i+1}/5)")
+                    # Ensure the data is in the right format
+                    required_fields = ["trajectory_summary", "proposed_adjustments", "correctness_judgement"]
+                    if all(field in data for field in required_fields):
+                        trajectory_summary = data["trajectory_summary"]
+                        proposed_adjustments = data["proposed_adjustments"]
+                        correctness_judgement = data["correctness_judgement"]
+                        # Validate that all fields are strings
+                        if (not isinstance(trajectory_summary, str) 
+                            or not isinstance(proposed_adjustments, str) 
+                            or not isinstance(correctness_judgement, str)):
+                            logger.warning(
+                                f"Invalid field types: "
+                                f"trajectory_summary={type(trajectory_summary)}, "
+                                f"proposed_adjustments={type(proposed_adjustments)}, "
+                                f"correctness_judgement={type(correctness_judgement)}, "
+                                f"regenerating (trial {i+1}/5)"
+                            )
+                            data = None
+                            continue
+                        # Validate correctness_judgement values
+                        if correctness_judgement.lower().strip() not in ["correct", "incorrect"]:
+                            logger.warning(f"Invalid correctness_judgement value: '{correctness_judgement}', regenerating (trial {i+1}/5)")
                             data = None
                             continue
                         # Valid format - break out of retry loop
-                        logger.debug(f"Valid review format found on trial {i+1}")
+                        logger.debug(f"Valid reflection format found on trial {i+1}")
                         break
                     else:
-                        # If review field is missing, regenerate
-                        logger.warning(f"Review field missing from reflector response, regenerating (trial {i+1}/5)")
+                        # If required fields are missing, regenerate
+                        missing_fields = [field for field in required_fields if field not in data]
+                        logger.warning(f"Required fields missing from reflector response: {missing_fields}, regenerating (trial {i+1}/5)")
                         data = None
                         continue
 
-                # If all trials failed, return fallback with empty review list
+                # If all trials failed, return fallback
                 if data is None:
-                    logger.error(f"All trials failed to generate valid review format, using fallback")
+                    logger.error(f"All trials failed to generate valid reflection format, using fallback")
                     data = {
-                        "error": "All trials failed to generate valid review",
-                        "review": []
+                        "error": "All trials failed to generate valid reflection",
+                        "trajectory_summary": "Unable to generate trajectory summary after multiple attempts.",
+                        "proposed_adjustments": "Unable to generate reflection after multiple attempts.",
+                        "correctness_judgement": "incorrect"
                     }
 
                 return data 
             reflections = []
-            num_reflections = 1  ### Since we are genearting num_reflections rubrics in one generation, here we set num_reflections to 1. 
             num_reflection_workers = int(os.getenv("MAX_REFLECTION_WORKERS", 16))           
             with ThreadPoolExecutor(max_workers = num_reflection_workers) as executor:
                 futures = [executor.submit(_generate_single_reflection) for _ in range(num_reflections)]
@@ -359,90 +362,151 @@ You will be given the following materials:
                     except Exception as e:
                         logger.error(f"Reflection future failed: {e}.")
                         reflections.append({"error": "Reflection failed"})
-
             
-            review_items = reflections[0].get("review", []) if reflections else []
-            # Ensure there are only num_reflections rubrics in the generated reviews list
-            if isinstance(review_items, list) and len(review_items) > num_reflections:
-                logger.warning(f"Generated {len(review_items)} rubrics, but expected {num_reflections}. Randomly selecting {num_reflections} rubrics.")
-                review_items = random.sample(review_items, num_reflections)
-
-            # join into a single readable evaluation text
-            if isinstance(review_items, list):
-                summarized_reflection = "\n\n".join(review_items)
-            elif isinstance(review_items, str):
-                summarized_reflection = review_items 
-                logger.error(f"review items is string. Using fault tolerant formatting...")
-            else:
-                logger.error(f"Unexpected review items type: {type(review_items)}")
-            knowledge_history.append(summarized_reflection)
+            ################# COMPRESSION #################
             # Aggregate the results - pickout the ones where reflector judge the trace as wrong. 
-            # error_reflections = []
-            # for reflection in reflections:
-            #     verdict = reflection.get("correctness_judgement", "")
-            #     if verdict and verdict != "correct": # treating incorrect and incomplete as wrong.
-            #         error_reflections.append(reflection)
+            error_reflections = []
+            for reflection in reflections:
+                verdict = reflection.get("correctness_judgement", "")
+                if verdict and verdict == "incorrect":
+                    error_reflections.append(reflection)
 
-            # # Compress Reflections into 1 report. 
-            # compression_system_prompt = COMPRESSION_SYSTEM_PROMPT
-            # compression_user_template = COMPRESSION_USER_TEMPLATE
-            # compression_tools_plain = COMPRESSION_TOOLS_PLAIN
+            # Compress Reflections into 1 report. 
+            compression_system_prompt = """
+You are an expert summarizer. Your task is to read multiple reviewer reports and deduplicate them.
 
-            # summarized_reflection = "N/A"
-            # if error_reflections:
-            #     question = trajectory["question"]
-            #     prediction = trajectory["prediction"]
-            #     reflections_text = ""
-            #     for i, reflection in enumerate(error_reflections):
-            #         reflections_text += (
-            #             f"# Review {i}:\n"
-            #             f"## Assistant Trajectory Summary: {reflection.get('trajectory_summary', '')}\n\n"
-            #             f"## Error Report: {reflection.get('error_report', '')}\n\n"
-            #             f"## Rubric Based Evaluation: {reflection.get('rubric_based_evaluation', '')}\n\n"
-            #         )
+# Output format:
+- After your analysis, you MUST use the 'output_json_summrized_reflction' tool to produce a json object of your reflection
+- Before return, double check that the only tool you called is 'output_json_summrized_reflction'
+"""
 
-            #     # format compression prompt 
-            #     compression_prompt = compression_user_template.format(
-            #         question = question,
-            #         prediction = prediction,
-            #         reflections = reflections_text,
-            #     )
-            #     tokenizer = get_glm_tokenizer()
-            #     prompt = tokenizer.apply_chat_template(
-            #         [
-            #             {"role": "system", "content": compression_system_prompt},
-            #             {"role": "user", "content": compression_prompt},
-            #         ],
-            #         tools = tools_plain2openai(compression_tools_plain),
-            #         tokenize=False,
-            #         enable_thinking=True,
-            #         add_generation_prompt=True,
-            #     )
-            #     logger.debug(f"compression prompt: {prompt}")
-            #     client = get_glm_openai_client()
-            #     response = client.completions.create(
-            #         model="zai-org/GLM-4.6",
-            #         prompt = prompt,
-            #         **DEFAULT_COMPLETION_CONFIG,
-            #     )
-            #     response = response.choices[0].text
-            #     response = "<think>" + response
-            #     logger.debug(f"compressed report: {response}")
+            compression_user_template = """
+# General Context
+You will be provided with the following materials:
+- The original question given to the assistant.
+- The final answer the assistant produced.
+- Multiple reviewer reports on an assistant's trajectory. Each report will have a trajectory summary and proposed adjustments. 
 
-            #     try:
-            #        # GLM is using pure text handling.
-            #        parsed_response = parse_model_response(response, COMPRESSION_TOOLS_PLAIN)
-            #        reasoning_content = parsed_response.get("reasoning_content", "")
-            #        tool_calls = parsed_response.get("tool_calls", [])
-            #        data = tool_calls[0]["arguments"]
-            #        data["reasoning_content"] = reasoning_content
-            #        summarized_reflection = data
-            #     except Exception as e:
-            #         logger.error(f"Unexpected error parsing reflector response, using fallback output. Error: {e}")
-            #         data = {
-            #             "error": "Reflector encountered unexpected error",
-            #         }
-            #     knowledge_history.append(summarized_reflection)
+# Key Instructions:
+- Preserve original wording of each proposed adjustment. Do not rewrite, paraphrase, generalize, or add new content.
+- Perform deduplication only: when two or more adjustments have very close semantic meaning, merge by keeping one verbatim line and removing the others.
+
+# Hard rules
+- Do not elevate to higher-level summaries. Do not introduce titles, headings, or new structure.
+- Maintain the original voice and concrete phrasing where present.
+
+Below are the information needed for summarization: 
+### Original question 
+{question} 
+
+### Assistant final answer 
+{prediction}
+
+### Reviewer reports 
+{reflections}
+"""
+
+            compression_tools_plain = [{
+                "name": "output_json_summrized_reflction",
+                "description": "Output a json object of the reflection on the task agent's trajectory.",
+                "parameters": {
+                    'type': 'object',
+                    'properties': {
+                        "summarized_proposed_adjustments": {
+                            "type": "string",
+                            "description": (
+                                "A newline-separated list of the proposed adjustments after deduplication only, formatted as: **Reviewer**: <proposed adjustment>\\n"
+                            )
+                        }
+                    },
+                    'required': [],
+                    'additionalProperties': False,
+                }
+            }]
+
+            summarized_reflection = "N/A"
+            if error_reflections:
+                question = trajectory["question"]
+                prediction = trajectory["prediction"]
+                reflections_text = ""
+                for i, reflection in enumerate(error_reflections):
+                    reflections_text += (
+                        f"# Review {i}:\n"
+                        f"## Assistant Trajectory Summary: {reflection.get('trajectory_summary', '')}\n\n"
+                        f"## Proposed adjustments: {reflection.get('proposed_adjustments', '')}\n\n"
+                    )
+
+                # format compression prompt 
+                compression_prompt = compression_user_template.format(
+                    question = question,
+                    prediction = prediction,
+                    reflections = reflections_text,
+                )
+                tokenizer = get_glm_tokenizer()
+                prompt = tokenizer.apply_chat_template(
+                    [
+                        {"role": "system", "content": compression_system_prompt},
+                        {"role": "user", "content": compression_prompt},
+                    ],
+                    tools = tools_plain2openai(compression_tools_plain),
+                    tokenize=False,
+                    enable_thinking=True,
+                    add_generation_prompt=True,
+                )
+                logger.debug(f"compression prompt: {prompt}")
+                client = get_glm_openai_client()
+
+                # Add retrial logic for compression (similar to reflection)
+                data = None
+                for i in range(5):  # perform 5 trials, ensure the output format
+                    response = client.completions.create(
+                        model="zai-org/GLM-4.6",
+                        prompt = prompt,
+                        **DEFAULT_COMPLETION_CONFIG,
+                    )
+                    response = response.choices[0].text
+                    response = "<think>" + response
+                    logger.debug(f">>>>>>>>>> compression response (trial {i+1}/5): {response}.")
+
+                    try:
+                        # GLM is using pure text handling.
+                        parsed_response = parse_model_response(response, compression_tools_plain)
+                        reasoning_content = parsed_response.get("reasoning_content", "")
+                        tool_calls = parsed_response.get("tool_calls", [])
+                        data = tool_calls[0]["arguments"]
+                        data["reasoning_content"] = reasoning_content
+                    except Exception as e:
+                        logger.error(f"Unexpected error parsing compression response, using fallback output. Error: {e}. Raw response:{parsed_response}")
+                        # Continue to next trial
+                        continue
+
+                    # Ensure the data is in the right format
+                    if "summarized_proposed_adjustments" in data:
+                        summarized_proposed_adjustments = data["summarized_proposed_adjustments"]
+                        # Validate that field is a string
+                        if not isinstance(summarized_proposed_adjustments, str):
+                            logger.warning(f"Invalid field type: summarized_proposed_adjustments={type(summarized_proposed_adjustments)}, regenerating (trial {i+1}/5)")
+                            data = None
+                            continue
+                        # Valid format - break out of retry loop
+                        logger.debug(f"Valid compression format found on trial {i+1}")
+                        break
+                    else:
+                        # If required field is missing, regenerate
+                        logger.warning(f"Required field 'summarized_proposed_adjustments' missing from compression response, regenerating (trial {i+1}/5)")
+                        data = None
+                        continue
+
+                # If all trials failed, return fallback
+                if data is None:
+                    logger.error(f"All trials failed to generate valid compression format, using fallback")
+                    data = {
+                        "error": "Compression encountered unexpected error after multiple attempts",
+                        "summarized_proposed_adjustments": "Unable to compress reflections after multiple attempts."
+                    }
+
+                summarized_reflection = data
+                knowledge_history.append(summarized_reflection)
 
 
             iteration_result = {

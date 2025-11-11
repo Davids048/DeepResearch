@@ -132,3 +132,64 @@ def parse_model_response(response: str, defined_tools: list):
         message['tool_calls'] = tool_calls
 
     return message
+
+def parse_model_response_json(response: str):
+    """
+    Parse model response where JSON is wrapped in ``` blocks.
+    Everything before the json block is reasoning content.
+    Use the last generated json block.
+    The parsed json should be in the first tool call's arguments.
+    """
+    text = response.strip()
+    reasoning_content = None
+    tool_calls = []
+
+    # Find all JSON code blocks (``` or ```json)
+    json_blocks = re.findall(r'```(?:json)?\s*\n(.*?)\n```', text, re.DOTALL)
+
+    if json_blocks:
+        # Use the last JSON block
+        last_json_block = json_blocks[-1].strip()
+
+        # Find where the last JSON block starts in the text
+        last_block_pattern = r'```(?:json)?\s*\n' + re.escape(last_json_block) + r'\n```'
+        match = None
+        for m in re.finditer(last_block_pattern, text, re.DOTALL):
+            match = m
+
+        if match:
+            # Everything before the last JSON block is reasoning content
+            reasoning_content = text[:match.start()].strip()
+            # Remove <think> tags if present
+            if reasoning_content.startswith('<think>'):
+                reasoning_content = reasoning_content.removeprefix('<think>').strip()
+            if reasoning_content.endswith('</think>'):
+                reasoning_content = reasoning_content.removesuffix('</think>').strip()
+
+        # Try to parse the JSON
+        try:
+            parsed_json = json.loads(last_json_block)
+            # Create a tool call with the parsed JSON as arguments
+            tool_calls.append({
+                'tool_call_id': "tool-call-" + str(uuid.uuid4()),
+                'name': 'json_response',  # Default name for JSON responses
+                'arguments': parsed_json if isinstance(parsed_json, dict) else {'data': parsed_json}
+            })
+        except json.JSONDecodeError:
+            # If JSON parsing fails, treat everything as reasoning content
+            reasoning_content = text
+    else:
+        # No JSON blocks found, everything is reasoning content
+        reasoning_content = text
+        if reasoning_content.startswith('<think>'):
+            reasoning_content = reasoning_content.removeprefix('<think>').strip()
+        if reasoning_content.endswith('</think>'):
+            reasoning_content = reasoning_content.removesuffix('</think>').strip()
+
+    message = {'role': 'assistant'}
+    if reasoning_content:
+        message['reasoning_content'] = reasoning_content
+    if tool_calls:
+        message['tool_calls'] = tool_calls
+
+    return message 

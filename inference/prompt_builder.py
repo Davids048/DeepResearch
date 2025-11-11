@@ -82,19 +82,18 @@ def format_reflection_section(reflection: str) -> str:
 def format_knowledge_section(knowledge_history:List[dict])->str:
     if not knowledge_history:
         return ""
-    
+
     section = "\n\n# Previous review list:"
     for i, k in enumerate(knowledge_history):
         if isinstance(k, dict):
-            trajectory_summary = k.get("trajectory_summary", "")
-            error_summary = k.get("summarized_error_report", "")
-            eval_summary = k.get("summarized_rubric_based_evaluation", "") 
-            section += (
-                f"\n## review {i}:\n"
-                f"- Assistant Trajectory Summary: {trajectory_summary}\n"
-                f"- Error Report: {error_summary}.\n"
-                f"- Evaluation summary: {eval_summary}"
-            )
+            # Extract the summarized proposed adjustments from the compression output
+            summarized_adjustments = k.get("summarized_proposed_adjustments", "")
+            if summarized_adjustments:
+                section += (
+                    f"\n## review {i}:\n"
+                    f"{summarized_adjustments}\n"
+                )
+            # If no valid content, skip this entry (don't add anything)
         elif isinstance(k, str):
             section += (
                 f"\n## review {i}:\n"
