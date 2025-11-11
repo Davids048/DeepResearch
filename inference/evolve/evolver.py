@@ -198,13 +198,33 @@ class Evolver:
             logger.info(f"=== Evolution Iteration {iteration}/{max_iterations} ===")
             
             # 1. GENERATE: Task agent generates a trajectory
-            # Phase 3: Pass previous reflection to guide next attempt
             additional_instructions = """\n\nRead the reviews based on previous attempts first, then solve the problem leveraging each relevant proposed adjustments."""
             trajectory = self.generator.generate(
                 task=task,
                 knowledge_history=knowledge_history,
                 additional_instructions=additional_instructions if knowledge_history else None,
             )
+
+            ##########################
+            # # DEBUG: USE AN INPUT FILE AND GET the trajectory with the corresponding question.
+            # import json
+            # input_file = "../inference/output/GLM-4.6/browsecomp/20251111-010304/iter1_scored.jsonl"
+            # # Extract the question from task
+            # try:
+            #     task_question = task['item']['question']
+            # except:
+            #     raw_msg = task['item']['messages'][1]["content"]
+            #     task_question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg
+
+            # # Load the file and find matching trajectory
+            # with open(input_file, 'r') as f:
+            #     for line in f:
+            #         data = json.loads(line)
+            #         if data.get('question') == task_question:
+            #             trajectory = data
+            #             logger.info(f"DEBUG: Loaded trajectory from {input_file} for question: {task_question[:50]}...")
+            #             break
+            ##########################
 
             logger.debug(f"Task agent finished iteration {iteration}")
             # 2. REFLECT: Evaluate the attempt
@@ -236,15 +256,17 @@ You will be given the following materials:
 
 ## Perform the following steps:
 1. First think carefully how you would have approached the question, including assumptions, search strategies, pivots. 
-2. Carefully read through the assistant’s full trajectory.  Compare what is different from what you assumed. 
-3. Assess whether the trajectory sucessfully complete the task. 
-5. Based on your comparison, write some proposed_adjustments. Write like an inner monologue planning a pivot for the next attempt. Start with "Let me think outside the box, what if..."
+2. Carefully read through the assistant’s full trajectory.  Summarize key assumptions, strategies, and explored search space.
+3. Compare what is different from what you would have done.
+4. Based on your comparison, write some proposed_adjustments. Write like an inner monologue planning a pivot for the next attempt. Start with "Let me think outside the box, what if..."
+
+## Hard rules for proposed_adjustments:
+- Focus on how to rethink the assumptions, reasoning, or search strategy, not on reusing or referring to specific names, facts, or partial answers from the trajectory. 
+- Do not include any concrete entities or details from the previous attempt.
 
 ## Output Requirement
 Output a json object wrapped in ``` blocks including the following fields: 
-- correctness_judgement: Judgement on the correctness of the prediction. Options: correct|incorrect. Definition: 'correct': the prediction meets all user requirements; 'incorrect': the prediction does not meet user requirements or failed to find a plausible prediction."
-- proposed_adjustments: Your proposed pivot. 
-- trajectory_summary: A summary of the trajectory, including key assumptions, strategies, and explored search space.
+- proposed_adjustments: Your proposed pivots. 
 
 ## Data
 ### Assistant's Message Trajectory
@@ -257,11 +279,10 @@ Output a json object wrapped in ``` blocks including the following fields:
 {prediction}
 """
 
-            num_reflections = int(os.getenv("MAX_REFLECTIONS", 16))           
+            num_reflections = int(os.getenv("MAX_REFLECTIONS", 16))
             reflector_user_prompt = reflector_user_template.format(
                 messages = messages,
                 prediction = prediction,
-                num_rubrics = num_reflections,
             )
             tokenizer = get_glm_tokenizer()
             prompt = tokenizer.apply_chat_template(
@@ -308,27 +329,16 @@ Output a json object wrapped in ``` blocks including the following fields:
                         continue
 
                     # Ensure the data is in the right format
-                    required_fields = ["trajectory_summary", "proposed_adjustments", "correctness_judgement"]
+                    required_fields = ["proposed_adjustments"]
                     if all(field in data for field in required_fields):
-                        trajectory_summary = data["trajectory_summary"]
                         proposed_adjustments = data["proposed_adjustments"]
-                        correctness_judgement = data["correctness_judgement"]
                         # Validate that all fields are strings
-                        if (not isinstance(trajectory_summary, str) 
-                            or not isinstance(proposed_adjustments, str) 
-                            or not isinstance(correctness_judgement, str)):
+                        if not isinstance(proposed_adjustments, str):
                             logger.warning(
                                 f"Invalid field types: "
-                                f"trajectory_summary={type(trajectory_summary)}, "
                                 f"proposed_adjustments={type(proposed_adjustments)}, "
-                                f"correctness_judgement={type(correctness_judgement)}, "
                                 f"regenerating (trial {i+1}/5)"
                             )
-                            data = None
-                            continue
-                        # Validate correctness_judgement values
-                        if correctness_judgement.lower().strip() not in ["correct", "incorrect"]:
-                            logger.warning(f"Invalid correctness_judgement value: '{correctness_judgement}', regenerating (trial {i+1}/5)")
                             data = None
                             continue
                         # Valid format - break out of retry loop
@@ -346,9 +356,7 @@ Output a json object wrapped in ``` blocks including the following fields:
                     logger.error(f"All trials failed to generate valid reflection format, using fallback")
                     data = {
                         "error": "All trials failed to generate valid reflection",
-                        "trajectory_summary": "Unable to generate trajectory summary after multiple attempts.",
-                        "proposed_adjustments": "Unable to generate reflection after multiple attempts.",
-                        "correctness_judgement": "incorrect"
+                        "proposed_adjustments": "Unable to generate reflection after multiple attempts."
                     }
 
                 return data 
@@ -364,12 +372,8 @@ Output a json object wrapped in ``` blocks including the following fields:
                         reflections.append({"error": "Reflection failed"})
             
             ################# COMPRESSION #################
-            # Aggregate the results - pickout the ones where reflector judge the trace as wrong. 
-            error_reflections = []
-            for reflection in reflections:
-                verdict = reflection.get("correctness_judgement", "")
-                if verdict and verdict == "incorrect":
-                    error_reflections.append(reflection)
+            # Aggregate all reflections (no filtering based on correctness)
+            error_reflections = reflections
 
             # Compress Reflections into 1 report. 
             compression_system_prompt = """
@@ -385,7 +389,7 @@ You are an expert summarizer. Your task is to read multiple reviewer reports and
 You will be provided with the following materials:
 - The original question given to the assistant.
 - The final answer the assistant produced.
-- Multiple reviewer reports on an assistant's trajectory. Each report will have a trajectory summary and proposed adjustments. 
+- Multiple reviewer reports on an assistant's trajectory. Each report will have some proposed adjustments. 
 
 # Key Instructions:
 - Preserve original wording of each proposed adjustment. Do not rewrite, paraphrase, generalize, or add new content.
@@ -413,9 +417,12 @@ Below are the information needed for summarization:
                     'type': 'object',
                     'properties': {
                         "summarized_proposed_adjustments": {
-                            "type": "string",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
                             "description": (
-                                "A newline-separated list of the proposed adjustments after deduplication only, formatted as: **Reviewer**: <proposed adjustment>\\n"
+                                "An array of deduplicated proposed adjustments, each formatted as: **Reviewer**: <original proposed adjustment>"
                             )
                         }
                     },
@@ -432,7 +439,6 @@ Below are the information needed for summarization:
                 for i, reflection in enumerate(error_reflections):
                     reflections_text += (
                         f"# Review {i}:\n"
-                        f"## Assistant Trajectory Summary: {reflection.get('trajectory_summary', '')}\n\n"
                         f"## Proposed adjustments: {reflection.get('proposed_adjustments', '')}\n\n"
                     )
 
@@ -483,9 +489,14 @@ Below are the information needed for summarization:
                     # Ensure the data is in the right format
                     if "summarized_proposed_adjustments" in data:
                         summarized_proposed_adjustments = data["summarized_proposed_adjustments"]
-                        # Validate that field is a string
-                        if not isinstance(summarized_proposed_adjustments, str):
+                        # Validate that field is a list
+                        if not isinstance(summarized_proposed_adjustments, list):
                             logger.warning(f"Invalid field type: summarized_proposed_adjustments={type(summarized_proposed_adjustments)}, regenerating (trial {i+1}/5)")
+                            data = None
+                            continue
+                        # Validate all items in the list are strings
+                        if not all(isinstance(item, str) for item in summarized_proposed_adjustments):
+                            logger.warning(f"Invalid list items: not all items in summarized_proposed_adjustments are strings, regenerating (trial {i+1}/5)")
                             data = None
                             continue
                         # Valid format - break out of retry loop
@@ -502,7 +513,7 @@ Below are the information needed for summarization:
                     logger.error(f"All trials failed to generate valid compression format, using fallback")
                     data = {
                         "error": "Compression encountered unexpected error after multiple attempts",
-                        "summarized_proposed_adjustments": "Unable to compress reflections after multiple attempts."
+                        "summarized_proposed_adjustments": ["Unable to compress reflections after multiple attempts."]
                     }
 
                 summarized_reflection = data

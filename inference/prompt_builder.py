@@ -87,11 +87,13 @@ def format_knowledge_section(knowledge_history:List[dict])->str:
     for i, k in enumerate(knowledge_history):
         if isinstance(k, dict):
             # Extract the summarized proposed adjustments from the compression output
-            summarized_adjustments = k.get("summarized_proposed_adjustments", "")
+            summarized_adjustments = k.get("summarized_proposed_adjustments", [])
             if summarized_adjustments:
+                # Join list items with newlines
+                adjustments_text = "\n".join(summarized_adjustments)
                 section += (
                     f"\n## review {i}:\n"
-                    f"{summarized_adjustments}\n"
+                    f"{adjustments_text}\n"
                 )
             # If no valid content, skip this entry (don't add anything)
         elif isinstance(k, str):
