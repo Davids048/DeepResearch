@@ -247,6 +247,9 @@ Your goal is to identify errors, inefficiencies, and opportunities for improveme
 - Base your reflection solely on the assistant's reasoning and action trajectory.  
 - Do **not** use external tools or perform additional searches during analysis.  
 - Your evaluation must remain grounded in the assistant’s own process and content.  
+- Do not include any concrete clues or details from the previous attempt other than those mentioned in the original question.
+- Zero-leak policy: if a detail appears in the trajectory but not verbatim in the original question, it is forbidden.
+
 """
 
             reflector_user_template = """
@@ -258,15 +261,21 @@ You will be given the following materials:
 1. First think carefully how you would have approached the question, including assumptions, search strategies, pivots. 
 2. Carefully read through the assistant’s full trajectory.  Summarize key assumptions, strategies, and explored search space.
 3. Compare what is different from what you would have done.
-4. Based on your comparison, write some proposed_adjustments. Write like an inner monologue planning a pivot for the next attempt. Start with "Let me think outside the box, what if..."
+4. Based on your comparison, write some proposed_adjustments. Write like an inner monologue planning a pivot for the next attempt. Use the format: "Let me think outside the box, what if...?"
+5. Leak-sanitization checklist before finalizing:
+   - Remove every detail, name, location, time, unless it appeared in the original question.
 
 ## Hard rules for proposed_adjustments:
 - Focus on how to rethink the assumptions, reasoning, or search strategy, not on reusing or referring to specific names, facts, or partial answers from the trajectory. 
 - Do not include any concrete entities or details from the previous attempt.
+- Focus only on rethinking assumptions, reasoning, or search strategy. 
+- Do not reuse or refer to specific names, facts, numbers, or partial answers from the trajectory unless they appear verbatim in the original question.
 
 ## Output Requirement
 Output a json object wrapped in ``` blocks including the following fields: 
 - proposed_adjustments: Your proposed pivots. 
+- The proposed_adjustments must pass the leak-sanitization checklist. If any forbidden detail remains, remove it or replace with a placeholder.
+
 
 ## Data
 ### Assistant's Message Trajectory
@@ -392,8 +401,13 @@ You will be provided with the following materials:
 - Multiple reviewer reports on an assistant's trajectory. Each report will have some proposed adjustments. 
 
 # Key Instructions:
-- Preserve original wording of each proposed adjustment. Do not rewrite, paraphrase, generalize, or add new content.
-- Perform deduplication only: when two or more adjustments have very close semantic meaning, merge by keeping one verbatim line and removing the others.
+- Preserve the original wording where possible. You may drop or merge semantically equivalent items, even if they differ slightly in phrasing, punctuation, or word choice.
+- Perform semantic deduplication only. If two or more adjustments express the same actionable idea, keep exactly one and delete all others.
+
+# Note: 
+- Treat two adjustments as duplicates if they differ only in surface form (e.g., synonyms, tense, or formatting) but share the same intent or suggestion.
+- Treat items as duplicates even if they use different wording, as long as they point the assistant to the same change.
+- The final list must contain only unique adjustments. No adjustment should appear more than once.
 
 # Hard rules
 - Do not elevate to higher-level summaries. Do not introduce titles, headings, or new structure.
@@ -412,7 +426,7 @@ Below are the information needed for summarization:
 
             compression_tools_plain = [{
                 "name": "output_json_summrized_reflction",
-                "description": "Output a json object of the reflection on the task agent's trajectory.",
+                "description": "Output a json object of the reflection on the task agent's trajectory. When producing summarized_proposed_adjustments, include only the deduplicated list.",
                 "parameters": {
                     'type': 'object',
                     'properties': {
