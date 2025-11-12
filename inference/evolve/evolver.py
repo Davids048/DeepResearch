@@ -279,6 +279,7 @@ Output a json object wrapped in ``` blocks including the following fields:
 - proposed_adjustments: Your proposed pivots. 
 
 ## Example Output Format:
+<Your reasoning> 
 ```
 {{
     "proposed_adjustments": <your proposed adjustments>,
