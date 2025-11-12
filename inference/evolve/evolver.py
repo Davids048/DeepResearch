@@ -196,35 +196,37 @@ class Evolver:
         knowledge_history = [] # a list of all the previous summarized reports.
         for iteration in range(1, max_iterations + 1):
             logger.info(f"=== Evolution Iteration {iteration}/{max_iterations} ===")
-            
+            trajectory = None
+            if iteration > 1:
             # 1. GENERATE: Task agent generates a trajectory
-            additional_instructions = """\n\nRead the reviews based on previous attempts first, then solve the problem leveraging each relevant proposed adjustments."""
-            trajectory = self.generator.generate(
-                task=task,
-                knowledge_history=knowledge_history,
-                additional_instructions=additional_instructions if knowledge_history else None,
-            )
+                additional_instructions = """\n\nRead the reviews based on previous attempts first, then solve the problem leveraging each relevant proposed adjustments."""
+                trajectory = self.generator.generate(
+                    task=task,
+                    knowledge_history=knowledge_history,
+                    additional_instructions=additional_instructions if knowledge_history else None,
+                )
+            else:
+                ##########################
+                # # DEBUG: USE AN INPUT FILE AND GET the trajectory with the corresponding question.
+                import json
+                input_file = "../inference/output/GLM-4.6/browsecomp/20251111-010304/iter1.jsonl"
+                # Extract the question from task
+                try:
+                    task_question = task['item']['question']
+                except:
+                    raw_msg = task['item']['messages'][1]["content"]
+                    task_question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg
 
-            ##########################
-            # # DEBUG: USE AN INPUT FILE AND GET the trajectory with the corresponding question.
-            # import json
-            # input_file = "../inference/output/GLM-4.6/browsecomp/20251111-010304/iter1_scored.jsonl"
-            # # Extract the question from task
-            # try:
-            #     task_question = task['item']['question']
-            # except:
-            #     raw_msg = task['item']['messages'][1]["content"]
-            #     task_question = raw_msg.split("User:")[1].strip() if "User:" in raw_msg else raw_msg
-
-            # # Load the file and find matching trajectory
-            # with open(input_file, 'r') as f:
-            #     for line in f:
-            #         data = json.loads(line)
-            #         if data.get('question') == task_question:
-            #             trajectory = data
-            #             logger.info(f"DEBUG: Loaded trajectory from {input_file} for question: {task_question[:50]}...")
-            #             break
-            ##########################
+                # Load the file and find matching trajectory
+                with open(input_file, 'r') as f:
+                    for line in f:
+                        data = json.loads(line)
+                        if data.get('question') == task_question:
+                            trajectory = data
+                            logger.info(f"DEBUG: Loaded trajectory from {input_file} for question: {task_question[:50]}...")
+                            break
+                ##########################
+            assert trajectory is not None
 
             logger.debug(f"Task agent finished iteration {iteration}")
             # 2. REFLECT: Evaluate the attempt
@@ -262,19 +264,26 @@ You will be given the following materials:
 2. Carefully read through the assistant’s full trajectory.  Summarize key assumptions, strategies, and explored search space.
 3. Compare what is different from what you would have done.
 4. Based on your comparison, write some proposed_adjustments. Write like an inner monologue planning a pivot for the next attempt. Use the format: "Let me think outside the box, what if...?"
-5. Leak-sanitization checklist before finalizing:
-   - Remove every detail, name, location, time, unless it appeared in the original question.
+5. Remove every detail, name, location, time, unless it appeared in the original question.
+
 
 ## Hard rules for proposed_adjustments:
 - Focus on how to rethink the assumptions, reasoning, or search strategy, not on reusing or referring to specific names, facts, or partial answers from the trajectory. 
 - Do not include any concrete entities or details from the previous attempt.
 - Focus only on rethinking assumptions, reasoning, or search strategy. 
 - Do not reuse or refer to specific names, facts, numbers, or partial answers from the trajectory unless they appear verbatim in the original question.
+- If any forbiddent examples, names, locations, time remains, remove it or replace with a placeholder.
 
 ## Output Requirement
 Output a json object wrapped in ``` blocks including the following fields: 
 - proposed_adjustments: Your proposed pivots. 
-- The proposed_adjustments must pass the leak-sanitization checklist. If any forbidden detail remains, remove it or replace with a placeholder.
+
+## Example Output Format:
+```
+{{
+    "proposed_adjustments": <your proposed adjustments>,
+}}
+```
 
 
 ## Data
@@ -386,7 +395,7 @@ Output a json object wrapped in ``` blocks including the following fields:
 
             # Compress Reflections into 1 report. 
             compression_system_prompt = """
-You are an expert summarizer. Your task is to read multiple reviewer reports and deduplicate them.
+You are an expert summarizer. Your task is to read multiple reviewer reports, deduplicate them, and remove any sensitive information.
 
 # Output format:
 - After your analysis, you MUST use the 'output_json_summrized_reflction' tool to produce a json object of your reflection
@@ -397,11 +406,12 @@ You are an expert summarizer. Your task is to read multiple reviewer reports and
 # General Context
 You will be provided with the following materials:
 - The original question given to the assistant.
-- The final answer the assistant produced.
 - Multiple reviewer reports on an assistant's trajectory. Each report will have some proposed adjustments. 
 
 # Key Instructions:
-- Preserve the original wording where possible. You may drop or merge semantically equivalent items, even if they differ slightly in phrasing, punctuation, or word choice.
+- Remove any details, examples, names, times, locations that did not appear in the original question. 
+- Preserve the original reviewer's phrasing when possible.
+- You may drop or merge semantically equivalent items, even if they differ slightly in phrasing, punctuation, or word choice.
 - Perform semantic deduplication only. If two or more adjustments express the same actionable idea, keep exactly one and delete all others.
 
 # Note: 
@@ -411,14 +421,12 @@ You will be provided with the following materials:
 
 # Hard rules
 - Do not elevate to higher-level summaries. Do not introduce titles, headings, or new structure.
-- Maintain the original voice and concrete phrasing where present.
+- No details, examples, names, times, locations that did not appear in the original question should appear in the final output. 
+- If any of the above exist, remove them from the final output. 
 
 Below are the information needed for summarization: 
 ### Original question 
 {question} 
-
-### Assistant final answer 
-{prediction}
 
 ### Reviewer reports 
 {reflections}
@@ -459,7 +467,6 @@ Below are the information needed for summarization:
                 # format compression prompt 
                 compression_prompt = compression_user_template.format(
                     question = question,
-                    prediction = prediction,
                     reflections = reflections_text,
                 )
                 tokenizer = get_glm_tokenizer()
