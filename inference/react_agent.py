@@ -42,9 +42,12 @@ TOOL_MAP = {tool.name: tool for tool in TOOL_CLASS}
 
 import random
 import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from logger import setup_logging
 logger = setup_logging(name=__name__, level=15)
+
+from parse_tools_utils import parse_model_response
 
 
 class MultiTurnReactAgent(FnCallAgent):
@@ -61,6 +64,180 @@ class MultiTurnReactAgent(FnCallAgent):
 
     def sanity_check_output(self, content):
         return "<think>" in content and "</think>" in content
+
+    def choose_best_response(self, messages, parsed_responses, planning_port):
+        """
+        Call the model to choose the most promising tool call from multiple parsed responses.
+        Similar workflow to evolver.py compression section.
+
+        Args:
+            messages: Current message history (no new stuff appended yet)
+            parsed_responses: List of dicts with {'content': str, 'tool_calls': list, 'valid': bool}
+            planning_port: Port for the OpenAI client
+
+        Returns:
+            Dict with keys: 'selected_index' (int), 'similarity_score' (float or None), 'reasoning_content' (str)
+        """
+        # Build selection prompt
+        selection_system_prompt = """You are an expert at evaluating reasoning paths and tool selections."""
+        selection_user_template = """# Context
+You are given the current conversation history and {num_responses} candidate responses from a reasoning agent. Each response includes reasoning content and potential tool calls.
+
+# Your Task
+Analyze the candidates and:
+1. Compute an overall similarity score (1-10) that captures how similar all {num_responses} responses are to each other in terms of reasoning approach and tool calls:
+   - 1 = All candidates are very different from each other (high diversity)
+   - 5 = Some candidates share similarities but there's notable variation
+   - 10 = All candidates are very similar (strong consensus)
+
+2. Select the ONE best candidate using these criteria IN ORDER:
+
+   **Priority 1 (Highest)**: Favor candidates that demonstrate:
+   - Questioning assumptions or challenging previous conclusions
+   - Detecting flaws, inconsistencies, or issues in prior reasoning
+   - Containing key reasoning pivots or new perspectives
+   - Goal: Increase overall exploration and verification
+
+   **Priority 2**: When candidates are similar, choose the one most likely to make progress by considering:
+   - Quality and depth of reasoning
+   - Appropriateness of tool choice
+   - Likelihood of getting useful information
+   - Alignment with the question
+
+# Current Message History
+{message_history}
+
+# Candidate Responses
+{candidates}
+
+# Output Format
+You must output a JSON object wrapped in triple backticks with this exact format:
+```json
+{{
+  "overall_similarity": <score between 1 and 10>,
+  "selected_index": <integer between 0 and {max_idx}>
+}}
+```
+
+Just output the JSON, nothing else after your thinking.
+"""
+
+        # Format message history (exclude system message)
+        history_text = ""
+        for i, msg in enumerate(messages):
+            if i == 0:  # Skip system message
+                continue
+            role = msg.get("role", "unknown")
+            if role == "user":
+                history_text += f"User: {msg.get('content', '')}\n\n"
+            elif role == "assistant":
+                reasoning = msg.get("reasoning_content", msg.get("content", ""))
+                history_text += f"Assistant: {reasoning}\n\n"
+            elif role == "tool":
+                history_text += f"Tool Results: {msg.get('content', '')}\n\n"
+
+        # Format candidates
+        candidates_text = ""
+        for idx, parsed in enumerate(parsed_responses):
+            candidates_text += f"## Candidate {idx}\n"
+            candidates_text += f"**Reasoning**: {parsed['content']}\n"
+            if parsed['tool_calls']:
+                candidates_text += f"**Tool Calls**: {parsed['tool_calls']}\n"
+            else:
+                candidates_text += f"**Tool Calls**: None\n"
+            candidates_text += "\n"
+
+        # Format final prompt
+        selection_prompt = selection_user_template.format(
+            num_responses=len(parsed_responses),
+            max_idx=len(parsed_responses) - 1,
+            message_history=history_text,
+            candidates=candidates_text
+        )
+
+        # Use tokenizer - match _call_server_plain
+        tok = AutoTokenizer.from_pretrained("zai-org/GLM-4.6")
+        tpl = Path("template.jinja").read_text()
+        tok.chat_template = tpl
+        prompt = tok.apply_chat_template(
+            [
+                {"role": "system", "content": selection_system_prompt},
+                {"role": "user", "content": selection_prompt},
+            ],
+            tokenize=False,
+            enable_thinking=True,
+            add_generation_prompt=True,
+        )
+
+        # Create client - match _call_server_plain
+        openai_api_key = "EMPTY"
+        openai_api_base = f"http://127.0.0.1:{planning_port}/v1"
+        client = OpenAI(
+            api_key=openai_api_key,
+            base_url=openai_api_base,
+            timeout=600.0,
+        )
+
+        # Call the model (with retry logic) - match _call_server_plain parameters
+        selected_idx = 0  # Default to first valid response
+        similarity_score = None
+        reasoning_content = ""
+
+        for attempt in range(3):
+            try:
+                response = client.completions.create(
+                    model=self.model,
+                    prompt=prompt,
+                    temperature=self.llm_generate_cfg.get('temperature', 0.6),
+                    top_p=self.llm_generate_cfg.get('top_p', 0.95),
+                    max_tokens=10000,
+                    presence_penalty=self.llm_generate_cfg.get('presence_penalty', 1.1)
+                )
+                response_text = response.choices[0].text
+                response_text = "<think>" + response_text
+
+                logger.debug(f"{'='*80}")
+                logger.debug(f"SELECTION MODEL RESPONSE (attempt {attempt+1}):")
+                logger.debug(f"{'='*80}")
+                logger.debug(f"{response_text}")
+                logger.debug(f"{'='*80}\n")
+
+                # Extract reasoning content (everything before the JSON)
+                import re
+                json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+                if json_match:
+                    # Get reasoning content before the JSON block
+                    json_start = json_match.start()
+                    reasoning_content = response_text[:json_start].strip()
+
+                    json_str = json_match.group(1)
+                    data = json.loads(json_str)
+                    idx = data.get("selected_index")
+                    overall_similarity = data.get("overall_similarity")
+
+                    # Log and store the similarity score
+                    if overall_similarity is not None:
+                        similarity_score = overall_similarity
+                        logger.debug(f"Overall similarity score: {overall_similarity}/10")
+
+                    if idx is not None and 0 <= idx < len(parsed_responses):
+                        selected_idx = idx
+                        logger.debug(f"✓ Model selected candidate {selected_idx}")
+                        break
+                    else:
+                        logger.warning(f"Selected index {idx} out of range or invalid")
+                else:
+                    logger.warning(f"Could not find JSON in response")
+                    reasoning_content = response_text  # Store full response if JSON not found
+
+            except Exception as e:
+                logger.error(f"Selection call failed (attempt {attempt+1}): {e}")
+
+        return {
+            'selected_index': selected_idx,
+            'similarity_score': similarity_score,
+            'reasoning_content': reasoning_content
+        }
 
     # ==========================================
     # PROTOCOL METHODS (Wrappers)
@@ -439,6 +616,10 @@ class MultiTurnReactAgent(FnCallAgent):
         round = 0
         answer_found = False
         prediction = ""
+
+        # Track reflection metadata for all rounds
+        reflection_metadata = []
+
         while num_llm_calls_available > 0:
             # Check whether time is reached
             elapsed_time = time.time() - start_time
@@ -451,15 +632,100 @@ class MultiTurnReactAgent(FnCallAgent):
                     "answer": answer,
                     "messages": messages,
                     "prediction": prediction,
-                    "termination": termination
+                    "termination": termination,
+                    "reflection_metadata": reflection_metadata
                 }
                 return result
             round += 1
             num_llm_calls_available -= 1
             logger.debug(f"--- Round {round} starting (LLM calls remaining: {num_llm_calls_available}, elapsed: {elapsed_time/60:.1f}m) ---")
 
-            # 1. Call server (protocol-specific)
-            response = self.call_server(messages, planning_port)
+            # 1. Call server (protocol-specific) - Parallel execution with MAX_REFLECTIONS candidates
+            # MAX_REFLECTIONS: number of candidate responses to generate
+            # MAX_REFLECTION_WORKERS: number of parallel workers (controls parallelism level)
+            num_reflections = int(os.getenv('MAX_REFLECTIONS', 4))
+            num_reflection_workers = int(os.getenv('MAX_REFLECTION_WORKERS', 4))
+            logger.debug(f"--- Round {round}: Launching {num_reflections} candidates with {num_reflection_workers} workers ---")
+
+            responses = []
+            with ThreadPoolExecutor(max_workers=num_reflection_workers) as executor:
+                # Submit calls based on MAX_REFLECTIONS, processed by MAX_REFLECTION_WORKERS in parallel
+                futures = [executor.submit(self.call_server, messages, planning_port) for _ in range(num_reflections)]
+
+                # Collect results as they complete
+                for idx, future in enumerate(as_completed(futures)):
+                    try:
+                        result = future.result()
+                        responses.append(result)
+                    except Exception as e:
+                        logger.error(f"Parallel call {idx} failed: {e}")
+                        responses.append(None)
+
+            # Print all responses with formatting
+            logger.debug(f"\n{'#'*80}")
+            logger.debug(f"### Round {round}: All {num_reflections} Parallel Responses ###")
+            logger.debug(f"{'#'*80}")
+            for idx, resp in enumerate(responses):
+                logger.debug(f"{'='*60}")
+                logger.debug(f"Response {idx}:")
+                logger.debug(f"{'='*60}")
+                if resp is not None:
+                    # For OpenAI tools protocol, extract content
+                    if self.protocol in ["minimaxm2"]:
+                        display_content = resp.content if hasattr(resp, 'content') else str(resp)
+                    else:
+                        display_content = resp
+                    logger.debug(f"{display_content}")
+                else:
+                    logger.debug("FAILED")
+                logger.debug(f"{'='*60}\n")
+
+            # Parse each response and extract tool calls, filter out invalid ones
+            valid_responses = []
+            for idx, resp in enumerate(responses):
+                if resp is not None:
+                    try:
+                        content, tool_calls = self.parse_and_extract_tools(resp, round)
+                        valid_responses.append({
+                            'response': resp,
+                            'content': content,
+                            'tool_calls': tool_calls,
+                            'original_idx': idx
+                        })
+                        logger.debug(f"Response {idx} parsed successfully: {len(tool_calls)} tool calls")
+                    except Exception as e:
+                        logger.error(f"Failed to parse response {idx}: {e}")
+
+            # If all responses failed, this is fatal
+            if not valid_responses:
+                logger.critical(f"FATAL: All {num_reflections} parallel calls failed or could not be parsed!")
+                raise RuntimeError("All parallel server calls failed")
+
+            # Prepare parsed responses for selection (without 'response' and 'original_idx')
+            parsed_responses = [{'content': vr['content'], 'tool_calls': vr['tool_calls']} for vr in valid_responses]
+
+            # Call the model to choose the best response
+            logger.debug(f"Calling model to select best response from {len(parsed_responses)} valid candidates")
+            selection_result = self.choose_best_response(messages, parsed_responses, planning_port)
+            selected_idx = selection_result['selected_index']
+            logger.debug(f"Selected candidate {selected_idx} (original response {valid_responses[selected_idx]['original_idx']})")
+
+            # Store reflection metadata for this round
+            round_metadata = {
+                "round": round,
+                "candidates": parsed_responses,  # List of {content, tool_calls} dicts
+                "selected_index": selected_idx,
+                "original_response_index": valid_responses[selected_idx]['original_idx'],
+                "similarity_score": selection_result['similarity_score'],
+                "selection_reasoning": selection_result['reasoning_content'],
+                "num_valid_candidates": len(valid_responses),
+                "num_total_attempts": num_reflections,
+                "num_workers": num_reflection_workers
+            }
+            reflection_metadata.append(round_metadata)
+
+            # Use the selected response
+            response = valid_responses[selected_idx]['response']
 
             # 2. Parse and extract tools (protocol-specific)
             content, tool_calls = self.parse_and_extract_tools(response, round)
@@ -550,7 +816,8 @@ class MultiTurnReactAgent(FnCallAgent):
                     "answer": answer,
                     "messages": messages,
                     "prediction": prediction,
-                    "termination": termination
+                    "termination": termination,
+                    "reflection_metadata": reflection_metadata
                 }
                 return result
 
@@ -581,6 +848,7 @@ class MultiTurnReactAgent(FnCallAgent):
             "prediction": prediction,
             "termination": termination,
             "rounds": round,
+            "reflection_metadata": reflection_metadata
         }
         return result
 

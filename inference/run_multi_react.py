@@ -130,8 +130,7 @@ if __name__ == "__main__":
         random.seed(args.debug_seed)
         random.shuffle(items)
         print(f">>>> DEBUG: using the first {args.debug_size} samples (shuffled with seed={args.debug_seed}).")
-        items = items[:args.debug_size] 
-
+        items = items[:args.debug_size]
 
     if total_splits > 1:
         # Add split suffix to output files when using splits
